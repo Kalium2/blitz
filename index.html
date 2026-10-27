@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Galactic Conquest</title>
+  <meta name="description" content="A Star Wars fan real-time strategy game for the browser, built on StarCraft-style mechanics.">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="stars"></canvas>
+
+  <!-- ============================== MAIN MENU -->
+  <div id="menu" class="screen">
+    <div class="title">
+      <div class="t1">GALACTIC</div>
+      <div class="t2">CONQUEST</div>
+      <div class="t3">A Star Wars fan real-time strategy game</div>
+    </div>
+
+    <div class="setup">
+      <h3>Choose your faction</h3>
+      <div id="factions" class="factions"></div>
+
+      <div class="opts">
+        <label>Opponent
+          <select id="opt-enemy">
+            <option value="random">Random</option>
+            <option value="empire">Galactic Empire</option>
+            <option value="rebels">Rebel Alliance</option>
+            <option value="separatists">Separatist Droid Army</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="opt-diff">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+            <option value="brutal">Brutal (AI +30% income)</option>
+          </select>
+        </label>
+        <label>Planet
+          <select id="opt-planet">
+            <option value="tatooine">Tatooine</option>
+            <option value="hoth">Hoth</option>
+            <option value="endor">Endor</option>
+          </select>
+        </label>
+        <label>Game speed
+          <select id="opt-speed">
+            <option value="0.8">Normal</option>
+            <option value="1" selected>Fast</option>
+            <option value="1.4">Faster</option>
+          </select>
+        </label>
+      </div>
+      <div class="buttons">
+        <button id="btn-start" class="primary">Start Battle</button>
+        <button id="btn-units">Unit Database</button>
+        <button id="btn-help">How to Play</button>
+      </div>
+    </div>
+    <div class="footer">Fan-made, non-commercial. All art is procedurally drawn. Star Wars is a trademark of Lucasfilm Ltd.; StarCraft is a trademark of Blizzard Entertainment. This project is not affiliated with either.</div>
+  </div>
+
+  <!-- ============================== UNIT DATABASE -->
+  <div id="units" class="screen hidden">
+    <div class="panelbox wide">
+      <div class="phead"><h2>Unit Database</h2><button class="close" data-close="units">✕</button></div>
+      <div class="tabs" id="unit-tabs"></div>
+      <div id="unit-table"></div>
+      <p class="note">Balance is checked with <code>node tools/balance.js</code>, which runs thousands of equal-cost battles in the real game engine.
+        Every unit has clear counters, and no faction wins more than ~55% of random equal-cost army matchups.</p>
+    </div>
+  </div>
+
+  <!-- ============================== HELP -->
+  <div id="help" class="screen hidden">
+    <div class="panelbox">
+      <div class="phead"><h2>How to Play</h2><button class="close" data-close="help">✕</button></div>
+      <div class="helpcols">
+        <div>
+          <h4>Goal</h4>
+          <p>Destroy every enemy structure. Lose all of yours and you are defeated.</p>
+          <h4>Economy</h4>
+          <p>Workers harvest <span class="c-k">kyber crystals</span> and <span class="c-g">tibanna gas</span> (build a refinery on a gas vent first). Build supply structures to raise your <span class="c-s">supply</span> cap.</p>
+          <h4>Tech</h4>
+          <p>HQ → Barracks → Factory → Hangar. The Research structure unlocks each faction's heavy units and bombers. Towers defend vs ground and air.</p>
+          <h4>Counters</h4>
+          <p>Damage bonuses (e.g. <i>+8 vs light</i>) decide fights. Hover any button for strong/weak matchups. Air units can only be hit by anti-air weapons.</p>
+        </div>
+        <div>
+          <h4>Controls</h4>
+          <table class="keys">
+            <tr><td>Left click / drag</td><td>Select (double-click: all of that type)</td></tr>
+            <tr><td>Right click</td><td>Move, attack, harvest, set rally</td></tr>
+            <tr><td><kbd>A</kbd> + click</td><td>Attack-move</td></tr>
+            <tr><td><kbd>Shift</kbd></td><td>Queue orders / add to selection</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>1-9</kbd></td><td>Set control group; <kbd>1-9</kbd> recall (double-tap to jump)</td></tr>
+            <tr><td><kbd>B</kbd> / <kbd>V</kbd></td><td>Worker: basic / advanced structures</td></tr>
+            <tr><td><kbd>F1</kbd> / <kbd>F2</kbd></td><td>Idle worker / select all army</td></tr>
+            <tr><td><kbd>Space</kbd></td><td>Jump to selection or base</td></tr>
+            <tr><td>Arrows, screen edge, middle-drag</td><td>Scroll; mouse wheel zooms</td></tr>
+            <tr><td><kbd>Tab</kbd> / hold <kbd>Alt</kbd></td><td>Show all health bars</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Cancel mode / cancel last in queue</td></tr>
+            <tr><td><kbd>P</kbd> / <kbd>F10</kbd></td><td>Pause</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== OPENING CRAWL -->
+  <div id="crawl" class="screen hidden">
+    <div class="farfar">A long time ago in a galaxy far, far away....</div>
+    <div class="crawl-wrap"><div class="crawl-text" id="crawl-text"></div></div>
+    <div class="skip">Click or press any key to skip</div>
+  </div>
+
+  <!-- ============================== IN-GAME HUD -->
+  <div id="hud" class="hidden">
+    <canvas id="view"></canvas>
+    <div id="topbar">
+      <div id="idle-workers" title="Idle workers (F1)">⚙ <span>0</span></div>
+      <div class="res" title="Kyber crystals"><i class="ico kyber"></i><span id="r-kyber">0</span></div>
+      <div class="res" title="Tibanna gas"><i class="ico gas"></i><span id="r-gas">0</span></div>
+      <div class="res" title="Supply"><i class="ico supply"></i><span id="r-supply">0/0</span></div>
+      <div id="clock">00:00</div>
+      <button id="btn-pause" title="Pause (P)">❚❚</button>
+      <button id="btn-sound" title="Sound">♪</button>
+      <button id="btn-quit" title="Main menu">☰</button>
+    </div>
+    <div id="msgs"></div>
+    <div id="panel">
+      <div id="mini-wrap"><canvas id="minimap" width="200" height="200"></canvas></div>
+      <div id="info"></div>
+      <div id="card"></div>
+    </div>
+    <div id="tooltip"></div>
+    <div id="overlay" class="hidden"></div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/sim.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/art.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

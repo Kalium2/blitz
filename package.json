@@ -1,0 +1,12 @@
+{
+  "name": "galactic-conquest",
+  "version": "1.0.0",
+  "description": "A Star Wars fan RTS for the browser built on StarCraft-style mechanics.",
+  "private": true,
+  "scripts": {
+    "start": "python3 -m http.server 8000",
+    "balance": "node tools/balance.js",
+    "tournament": "node tools/tournament.js 10",
+    "aitest": "node tools/aitest.js"
+  }
+}
