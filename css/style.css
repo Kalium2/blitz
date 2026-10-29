@@ -201,3 +201,19 @@ body.touch #touch.show { display: block; }
   .menu-item { padding: 7px 14px; font-size: 15px; }
   .tagline { margin: 4px 0 10px; }
 }
+
+/* ------------------------------------------------- flip / create-a-play */
+.flip-tag { font-family: var(--display); font-size: 11px; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.flip-tag.on { background: var(--p1); color: #001418; border-color: var(--p1); }
+.pp-special { grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); }
+.cp-wrap { display: flex; gap: 18px; align-items: center; justify-content: center; flex-wrap: wrap; }
+#cp-rows { display: flex; flex-direction: column; gap: 8px; min-width: 300px; }
+.cp-row { display: grid; grid-template-columns: 1fr 40px 110px 40px; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 10px; border: 2px solid var(--line); background: rgba(255, 255, 255, 0.04); }
+.cp-row.focus { border-color: var(--gold); box-shadow: 0 0 16px rgba(255, 210, 58, 0.3); }
+.cp-role { font-family: var(--display); font-size: 13px; letter-spacing: 0.06em; color: var(--muted); }
+.cp-route { font-family: var(--display); font-size: 17px; text-align: center; color: var(--gold); }
+.tp-arrow.sm { width: 40px; height: 36px; font-size: 16px; }
+#cp-canvas { width: min(384px, 90vw); border-radius: 10px; border: 2px solid var(--line); }
+.stat-table.leaders td.ld b { font-family: var(--display); font-size: 14px; color: var(--gold); letter-spacing: 0.04em; }
+.stat-table.leaders td.ld small { color: var(--muted); }
+.stat-table.leaders td:last-child { color: #dfe4ff; font-size: 14px; }

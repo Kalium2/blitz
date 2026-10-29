@@ -36,7 +36,11 @@
         self.lastDevice = 'keyboard';
         if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash', 'Enter'].indexOf(e.code) >= 0) e.preventDefault();
       });
-      window.addEventListener('keyup', function (e) { self.keys[e.code] = false; });
+      window.addEventListener('keyup', function (e) {
+        self.keys[e.code] = false;
+        // stop Space/Enter from also "clicking" whatever button last had focus
+        if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') e.preventDefault();
+      });
       window.addEventListener('blur', function () { self.keys = {}; self.latched = {}; });
     },
 

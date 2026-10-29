@@ -22,8 +22,8 @@
       var fgd = g.fgDistance();
       var goForIt = toGo <= 5 || (trailing && late) || (ytg <= 8 && toGo <= 8);
       if (!goForIt) {
-        if (fgd <= 52 && !(trailing && late && g.score[1 - g.poss] - g.score[g.poss] > 3)) return byId(S, 'fg');
-        if (!(trailing && late)) return byId(S, 'punt');
+        if (fgd <= 52 && !(trailing && late && g.score[1 - g.poss] - g.score[g.poss] > 3)) return byId(S, toGo <= 6 && Math.random() < 0.05 ? 'fakefg' : 'fg');
+        if (!(trailing && late)) return byId(S, toGo <= 8 && Math.random() < 0.07 ? 'fakepunt' : 'punt');
       }
     }
     if (g.quarter === 2 && g.clock < 8 && g.fgDistance() <= 50 && !g.conversion) return byId(S, 'fg');

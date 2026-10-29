@@ -1,5 +1,5 @@
 /* Football Blitz '26 service worker: network first, cache fallback for offline play. */
-var CACHE = 'fb26-v2';
+var CACHE = 'fb26-v3';
 var FILES = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
   './js/vendor/three.bundle.js', './js/render3d.js',

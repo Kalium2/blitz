@@ -596,6 +596,19 @@
   // ------------------------------------------------------------- camera
   R.updateCamera = function (g, dt) {
     var cam = this.cam, b = g.ball, fx, fy, H = 9, Bk = 13.5;
+    if (g.replay) {
+      // low sideline replay angle that tracks the ball
+      var side = cam.replaySide || (cam.replaySide = (b.y < MID ? -1 : 1));
+      var tx = b.x - g.dir * 4, ty = b.y + side * 13, tz = 3.6;
+      if (!cam.replayInit) { cam.rp = new T.Vector3(tx, tz, ty); cam.rl = new T.Vector3(b.x, 1, b.y); cam.replayInit = true; }
+      var kk = 1 - Math.exp(-dt * 5);
+      cam.rp.lerp(tmpV.set(tx, tz, ty), kk); cam.rl.lerp(tmpV.set(b.x, 1, b.y), kk);
+      this.camera.position.copy(cam.rp); this.camera.lookAt(cam.rl);
+      this.key.position.set(b.x + 25, 60, b.y + 35); this.key.target.position.set(b.x, 0, b.y);
+      cam.init = false;
+      return;
+    }
+    cam.replayInit = false; cam.replaySide = 0;
     if (g.phase === 'select' || g.phase === 'presnap' || g.phase === 'pat') {
       fx = g.losX + g.dir * 1; fy = MID + (b.y - MID) * 0.3; H = 8.6; Bk = 16;
       if (g.playType === 'kickoff') { fx = FB.Game.ownGoal(g.poss) + g.dir * 22; H = 10; Bk = 18; }
@@ -688,6 +701,7 @@
     tp.aR = { p: -sR * amp * 0.9 - 0.1, r: 0.12, e: -0.6 - amp * 0.9 };
     // blocking
     if (p.eng) { tp.lean = 0.7; crouchLegs(tp, 0.4); tp.tL += sL * 0.2; tp.tR += sR * 0.2; tp.aL = { p: -1.5, r: -0.1, e: -0.5 }; tp.aR = { p: -1.5, r: -0.1, e: -0.5 }; }
+    if (p.stiffT > 0) { tp.aL = { p: -1.55, r: 0.05, e: 0 }; tp.lean = 0.35; }
     var holding = b.holder === p && (b.state === 'held' || b.state === 'dead-held');
     if (holding) {
       if (p.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'kickoff' && g.playType !== 'run' && g.relX(p.x) <= 0.5) {
@@ -731,6 +745,7 @@
     this.crowdTarget = Math.max(0.05, (this.crowdTarget || 0.05) - dt * 0.12);
     this.crowdUniforms.uAmp.value = this.crowdAmp;
     this.glow.update(dt); this.solid.update(dt);
+    this.updateWeather(dt);
     var scale = this.gl.domElement.height / (2 * Math.tan(this.camera.fov * Math.PI / 360));
     this.glow.mat.uniforms.uScale.value = scale; this.solid.mat.uniforms.uScale.value = scale;
     this.camera.fov = this.baseFov * (1 - this.punch * 0.12);
@@ -769,6 +784,8 @@
       m.yaw = snap ? want : angLerp(m.yaw || want, want, Math.min(1, dt * (p.spinT > 0 ? 30 : 12)));
       m.root.rotation.y = m.yaw;
       m.apply(self.poseFor(g, p, m, dt), dt, snap);
+      var hs = FB.cheats && FB.cheats.bigHeads ? 1.9 : 1;
+      m.head.scale.set(hs, hs, hs);
       // turf kicked up by hard cuts
       var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
       if (sp > 7 && Math.random() < dt * 6) self.solid.spawn({ x: p.x, y: p.y, z: 0.05, vx: rnd(-1, 1) - p.vx * 0.1, vy: rnd(-1, 1) - p.vy * 0.1, vz: rnd(1, 3), life: 0.5, max: 0.5, color: Math.random() < 0.5 ? '#3d7a35' : '#5a3a20', size: 0.07, grav: 12 });
@@ -830,6 +847,47 @@
     this.landRing.visible = b.state === 'air' && (b.kind === 'pass' || b.kind === 'kick');
     if (this.landRing.visible) this.landRing.position.set(b.tx, 0.045, b.ty);
   };
+
+  // ------------------------------------------------------------ weather
+  R.setWeather = function (w) {
+    this.weather = w || 'clear';
+    var S = this.scene;
+    if (!this.wx) {
+      var n = this.quality === 'high' ? 4000 : 1800, pos = new Float32Array(n * 3);
+      var g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3));
+      this.wxMat = new T.PointsMaterial({ color: '#ffffff', size: 0.12, transparent: true, opacity: 0.7, depthWrite: false });
+      this.wx = new T.Points(g, this.wxMat); this.wx.frustumCulled = false;
+      this.wxN = n; this.wxPos = pos;
+      for (var i = 0; i < n; i++) { pos[i * 3] = rnd(-30, 30); pos[i * 3 + 1] = rnd(0, 25); pos[i * 3 + 2] = rnd(-30, 30); }
+      S.add(this.wx);
+    }
+    this.wx.visible = w === 'rain' || w === 'snow';
+    this.wxMat.size = w === 'snow' ? 0.18 : 0.07;
+    this.wxMat.color.set(w === 'snow' ? '#ffffff' : '#a9c4ff');
+    this.wxMat.opacity = w === 'snow' ? 0.9 : 0.55;
+    S.fog.near = w === 'fog' ? 12 : 160; S.fog.far = w === 'fog' ? 95 : 520;
+    S.fog.color.set(w === 'fog' ? '#3a4152' : '#0a0c1c');
+    this.fieldMat.roughness = w === 'rain' ? 0.45 : 0.88;
+    this.fieldMat.color.set(w === 'snow' ? '#e6ecf2' : w === 'rain' ? '#c9d4c9' : '#ffffff');
+    this.gl.toneMappingExposure = w === 'rain' ? 0.92 : w === 'fog' ? 0.98 : 1.05;
+  };
+
+  R.updateWeather = function (dt) {
+    if (!this.wx || !this.wx.visible) return;
+    var p = this.wxPos, n = this.wxN, snow = this.weather === 'snow', t = this.time;
+    var cx = this.camera.position.x, cz = this.camera.position.z;
+    for (var i = 0; i < n; i++) {
+      var k = i * 3;
+      p[k + 1] -= dt * (snow ? 2.2 : 26);
+      if (snow) { p[k] += Math.sin(t + i) * dt * 0.6; p[k + 2] += Math.cos(t * 0.7 + i) * dt * 0.6; }
+      else p[k] += dt * 2.5;
+      if (p[k + 1] < 0) { p[k + 1] = rnd(18, 25); p[k] = rnd(-30, 30); p[k + 2] = rnd(-30, 30); }
+    }
+    this.wx.position.set(cx, 0, cz);
+    this.wx.geometry.attributes.position.needsUpdate = true;
+  };
+
+  R.drawReplayBug = function (age, skipText) { this.hud.drawReplayBug(age, skipText); };
 
   R.project = function (x, y, z) {
     tmpV.set(x, z, y).project(this.camera);
@@ -910,6 +968,8 @@
       tp.aL = { p: -0.35, r: -0.45, e: -1.7 }; tp.aR = { p: -0.45, r: -0.5, e: -1.6 };
       m.apply(tp, dt, false);
       m.head.rotation.y = Math.sin(t * 0.7) * 0.25;
+      var hs = FB.cheats && FB.cheats.bigHeads ? 1.9 : 1;
+      m.head.scale.set(hs, hs, hs);
     });
     var a = this.time * 0.18;
     this.camera.position.set(50 - 7.6 + Math.sin(a) * 0.6, 1.45 + Math.sin(a * 0.7) * 0.15, MID + Math.sin(a) * 1.6);

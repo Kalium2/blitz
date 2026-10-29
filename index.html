@@ -31,6 +31,8 @@
         <button class="menu-item" data-action="1p">1 PLAYER</button>
         <button class="menu-item" data-action="2p">2 PLAYERS</button>
         <button class="menu-item" data-action="howto">HOW TO PLAY</button>
+        <button class="menu-item" data-action="create">CREATE A PLAY</button>
+        <button class="menu-item" data-action="extras">EXTRAS</button>
         <button class="menu-item" data-action="options">OPTIONS</button>
         <a class="menu-item" id="download-link" href="football-blitz.zip" download>DOWNLOAD GAME</a>
       </nav>
@@ -102,7 +104,11 @@
           <ul>
             <li><b>Snap</b> the ball with <kbd>ACTION</kbd>.</li>
             <li>Point the stick at a receiver and press <kbd>ACTION</kbd> to <b>pass</b>. Stick neutral throws to the most open man (the pulsing ring).</li>
-            <li>Ball carrier: <kbd>ACTION</kbd> = <b>spin</b>, <kbd>SPECIAL</kbd> = <b>hurdle</b>, hold <kbd>TURBO</kbd> to burst.</li>
+            <li>Hold <kbd>TURBO</kbd> while passing for a <b>bullet pass</b>: faster and flatter, a bit less accurate.</li>
+            <li>Ball carrier: <kbd>ACTION</kbd> = <b>spin</b>, <kbd>TURBO</kbd>+<kbd>ACTION</kbd> = <b>stiff-arm</b>, <kbd>SPECIAL</kbd> = <b>hurdle</b>, <kbd>TURBO</kbd>+<kbd>SPECIAL</kbd> = <b>lateral</b> to a trailing teammate.</li>
+            <li>At the line, <kbd>SPECIAL</kbd> calls an <b>audible</b> (both offense and defense).</li>
+            <li>On play select, <kbd>TURBO</kbd> <b>flips</b> the play to the other side. The bottom row has punt, field goal, <b>fake punt</b>, <b>fake FG</b> and <b>MY PLAY</b> from Create a Play.</li>
+            <li>Kicking off, press <kbd>SPECIAL</kbd> for an <b>onside kick</b>.</li>
             <li>Hit <kbd>SPECIAL</kbd> as the ball arrives to <b>jump</b> for the catch.</li>
           </ul>
           <h4>DEFENSE</h4>
@@ -118,7 +124,9 @@
           <ul>
             <li>7 on 7. <b>30 yards</b> for a first down.</li>
             <li>3 straight completions, or 3 straight defensive stops (sacks, picks, stuffs), puts your team <b>ON FIRE</b>: unlimited turbo and boosted stats until the other team scores.</li>
-            <li>Punt and field goal are on the play-select screen.</li>
+            <li>Big plays get an automatic <b>instant replay</b> (skip with <kbd>ACTION</kbd>).</li>
+            <li><b>Extras</b> has big heads, infinite turbo and weather (rain, snow, fog). Rain and snow make footing and catching harder.</li>
+            <li>There's a secret team. Try typing the name of the game on the title screen.</li>
           </ul>
           <h4>CONTROLS</h4>
           <table class="keys">
@@ -133,6 +141,37 @@
         </div>
       </div>
       <nav class="menu" data-menu><button class="menu-item" data-action="back">BACK</button></nav>
+    </div>
+  </section>
+
+  <!-- CREATE A PLAY -->
+  <section id="createplay" class="screen overlay center" aria-label="Create a play">
+    <div class="card-panel wide">
+      <h3 class="panel-title">CREATE A PLAY</h3>
+      <div class="cp-wrap">
+        <div id="cp-rows"></div>
+        <canvas id="cp-canvas" width="384" height="216"></canvas>
+      </div>
+      <p class="note">Pick a route for each receiver. Your play shows up as <b>MY PLAY</b> on the special-teams row of the offensive play select.</p>
+      <nav class="menu row" data-menu>
+        <button class="menu-item" data-action="save">SAVE PLAY</button>
+        <button class="menu-item" data-action="back">BACK</button>
+      </nav>
+    </div>
+  </section>
+
+  <!-- EXTRAS / CHEATS -->
+  <section id="extras" class="screen overlay center" aria-label="Extras">
+    <div class="card-panel">
+      <h3 class="panel-title">EXTRAS</h3>
+      <nav class="menu" data-menu>
+        <button class="menu-item" data-action="bigheads">BIG HEADS: OFF</button>
+        <button class="menu-item" data-action="infturbo">INFINITE TURBO: OFF</button>
+        <button class="menu-item" data-action="weather">WEATHER: CLEAR</button>
+        <button class="menu-item" data-action="replays">INSTANT REPLAYS: ON</button>
+        <button class="menu-item" data-action="back">BACK</button>
+      </nav>
+      <p class="note" id="hidden-note"></p>
     </div>
   </section>
 

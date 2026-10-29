@@ -49,6 +49,9 @@
     this.qLen = opts.quarterLen || 120;
     this.diff = opts.difficulty == null ? 1 : opts.difficulty;
     this.attract = !!opts.attract;
+    this.weather = opts.weather || 'clear';      // clear | rain | snow | fog
+    this.infTurbo = !!opts.infTurbo;             // cheat: humans never run out of turbo
+    this.flip = 1;
     this.score = [0, 0];
     this.quarter = 1;
     this.clock = this.qLen;
@@ -93,6 +96,8 @@
 
   // offense-relative -> world
   G.W = function (dx, dy) { return { x: this.losX + dx * this.dir, y: MID + dy * this.dir }; };
+  // offense-relative -> world, mirrored when the play is flipped
+  G.Wf = function (dx, dy) { return this.W(dx, dy * this.flip); };
   // world -> offense-relative downfield distance from LOS
   G.relX = function (x) { return (x - this.losX) * this.dir; };
 
@@ -155,7 +160,7 @@
 
     // Receiving team: RB returns, everyone else blocks.
     var rInfos = [rt.offense[1], rt.offense[2], rt.offense[3], rt.offense[4], rt.ol[0], rt.ol[1], rt.offense[0]];
-    var spots = [[5, MID], [28, 12], [28, 41], [22, 22], [22, 31], [16, 18], [16, 35]];
+    var spots = [[5, MID], [40, 12], [40, 41], [34, 22], [34, 31], [27, 18], [27, 35]];
     rInfos.forEach(function (info, i) {
       var p = self.mk(recv, info, i === 0 ? 'KR' : 'block', 'R' + i);
       p.x = ownGoal(recv) + rd * spots[i][0]; p.y = spots[i][1];
@@ -164,6 +169,11 @@
     this.returner = this.players[7];
 
     this.land = { x: ownGoal(recv) + rd * rnd(-1, 7), y: MID + rnd(-9, 9) };
+    this.onside = false;
+    // CPU tries an onside kick when trailing late
+    var deficit = this.score[recv] - this.score[kickTeam];
+    if (!this.isHuman(kickTeam) && !this.attract && deficit > 0 && deficit <= 16 && this.quarter >= 4 && this.clock < this.qLen * 0.5) this.onside = true;
+    else if (!this.isHuman(kickTeam) && deficit > 0 && deficit <= 16 && this.quarter >= 4 && this.clock < this.qLen * 0.5 && Math.random() < 0.6) this.onside = true;
     this.ball.x = this.losX; this.ball.y = MID; this.ball.z = 0.4; this.ball.state = 'tee';
     this.phase = 'presnap';
     this.snapTimer = 1.4;
@@ -172,9 +182,11 @@
   };
 
   // Set up a scrimmage play once both sides have chosen.
-  G.choosePlays = function (offPlay, defPlay) {
+  G.choosePlays = function (offPlay, defPlay, flip) {
     if (this.phase !== 'select') return;
     this.offPlay = offPlay; this.defPlay = defPlay;
+    this.flip = flip ? -1 : 1;
+    this.audibles = 0;
     if (offPlay.type === 'punt' || offPlay.type === 'fg') { this.setupKickAnim(offPlay.type); return; }
     this.setupScrimmage();
   };
@@ -191,22 +203,22 @@
     this.off = {};
     ['QB', 'RB', 'WR1', 'WR2', 'TE', 'OL0', 'OL1'].forEach(function (role) {
       var p = self.mk(o, infos[role], role, role);
-      var w = self.W(F[role][0], F[role][1]);
+      var w = self.Wf(F[role][0], F[role][1]);
       p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? 0 : Math.PI;
       self.off[role] = p;
       p.blocker = role === 'OL0' || role === 'OL1' || !!(play.block && play.block[role]);
       if (play.routes && play.routes[role] && !(play.block && play.block[role])) {
-        p.route = play.routes[role].map(function (pt) { return self.W(F[role][0] + pt[0], F[role][1] + pt[1]); });
+        p.route = play.routes[role].map(function (pt) { return self.Wf(F[role][0] + pt[0], F[role][1] + pt[1]); });
         p.cont = !!(play.cont && play.cont[role]);
       } else if (play.block && play.block[role] && play.routes && play.routes[role]) {
         // blockers on pass plays release a few yards then block
-        p.route = play.routes[role].slice(0, 1).map(function (pt) { return self.W(F[role][0] + pt[0], F[role][1] + pt[1]); });
+        p.route = play.routes[role].slice(0, 1).map(function (pt) { return self.Wf(F[role][0] + pt[0], F[role][1] + pt[1]); });
       }
     });
     var qb = this.off.QB;
     if (play.type === 'run') {
       var rb = this.off.RB;
-      rb.route = play.run.map(function (pt) { return self.W(F.RB[0] + pt[0], F.RB[1] + pt[1]); });
+      rb.route = play.run.map(function (pt) { return self.Wf(F.RB[0] + pt[0], F.RB[1] + pt[1]); });
     }
     this.qbDrop = play.form === 'under' ? this.W(-5.5, 0) : this.W(F.QB[0] - (play.drop ? play.drop - 5 : 1.5), 0);
 
@@ -219,9 +231,9 @@
       var spot = A[key].slice();
       var asg = self.defPlay.a[key];
       // press corners line up on their receiver
-      if (asg && asg.man === 'WR1') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR1[1]];
-      if (asg && asg.man === 'WR2') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR2[1]];
-      if (asg && asg.man === 'TE') spot = [4.5, F.TE[1]];
+      if (asg && asg.man === 'WR1') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR1[1] * self.flip];
+      if (asg && asg.man === 'WR2') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR2[1] * self.flip];
+      if (asg && asg.man === 'TE') spot = [4.5, F.TE[1] * self.flip];
       var w = self.W(spot[0], spot[1]);
       p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? Math.PI : 0;
       p.assign = asg;
@@ -385,9 +397,13 @@
     this.ctl.forEach(function (c) {
       var inp = inputs[c.slot] || {};
       if (self.playType === 'kickoff') {
-        if (inp.action && c.team === self.kickTeam) self.snapTimer = Math.min(self.snapTimer, 0);
+        if (c.team === self.kickTeam) {
+          if (inp.special && !self.onside) { self.onside = true; self.emit('onsidecall', {}); }
+          if (inp.action) self.snapTimer = Math.min(self.snapTimer, 0);
+        }
         return;
       }
+      if (inp.special) { self.audible(c.team === self.poss ? 'off' : 'def'); return; }
       if (c.team === self.poss) {
         if (inp.action) self.snapTimer = 0;
       } else if (c.pl) {
@@ -415,6 +431,22 @@
     if (this.snapTimer <= 0) this.snap();
   };
 
+  // Audible at the line: swap to a hot route / blitz without going back to the huddle.
+  var AUDIBLE = { off: ['slants', 'blast', 'deep'], def: ['allout', 'c2', 'man'] };
+  G.audible = function (side) {
+    if (this.conversion && side === 'off') { /* still allowed */ }
+    var list = AUDIBLE[side], cur = side === 'off' ? this.offPlay : this.defPlay;
+    var i = (list.indexOf(cur.id) + 1) % list.length;
+    var src = side === 'off' ? Plays.OFFENSE : Plays.DEFENSE;
+    var next = src.filter(function (pl) { return pl.id === list[i]; })[0];
+    if (!next) return;
+    if (side === 'off') this.offPlay = next; else this.defPlay = next;
+    var keep = this.snapTimer;
+    this.setupScrimmage();
+    if (!this.isHuman(this.poss)) this.snapTimer = Math.max(keep, 0.8);
+    this.emit('audible', { side: side, name: next.name });
+  };
+
   G.snap = function () {
     this.phase = 'live';
     this.playT = 0;
@@ -423,6 +455,13 @@
       b.state = 'air'; b.kind = 'kick'; b.sx = this.losX; b.sy = MID; b.sz = 0.4;
       b.tx = this.land.x; b.ty = this.land.y; b.tz = 0.8; b.t = 0; b.T = 2.8; b.peak = 19; b.target = this.returner;
       b.thrower = k;
+      b.onside = false;
+      if (this.onside) {
+        // squib it 11-14 yards so it can be recovered by either team
+        var kd = dirOf(this.kickTeam);
+        b.tx = this.losX + kd * rnd(11, 14); b.ty = MID + rnd(-10, 10); b.T = 0.9; b.peak = 1.6; b.onside = true;
+        this.emit('onside', {});
+      }
       this.emit('kick', {});
       return;
     }
@@ -465,7 +504,8 @@
       if (!p) return;
       var moving = Math.abs(inp.x || 0) + Math.abs(inp.y || 0) > 0.2;
       var wantsTurbo = !!inp.turbo && moving && (c.turbo > 0.02 || self.fire[c.team]);
-      if (wantsTurbo && !self.fire[c.team]) c.turbo = Math.max(0, c.turbo - dt * 0.42);
+      if (self.infTurbo) c.turbo = 1;
+      else if (wantsTurbo && !self.fire[c.team]) c.turbo = Math.max(0, c.turbo - dt * 0.42);
       else if (!inp.turbo) c.turbo = Math.min(1, c.turbo + dt * 0.24);
       self.inputToWant(p, inp, wantsTurbo);
       p.wantSpeed = 1;
@@ -519,12 +559,12 @@
       var canPass = p.role === 'QB' && !this.passThrown && this.relX(p.x) <= 0.5 && this.playType !== 'kickoff' && b.holder === this.off.QB && !this.handedOff && this.playType !== 'run';
       if (canPass) {
         this.passTarget = this.pickTarget(p, inp);
-        if (inp.action && this.passTarget) this.throwTo(p, this.passTarget);
+        if (inp.action && this.passTarget) this.throwTo(p, this.passTarget, !!inp.turbo);
         else if (inp.special) this.startSpin(p);
         return;
       }
-      if (inp.action) this.startSpin(p);
-      else if (inp.special) this.startJump(p);
+      if (inp.action) { if (inp.turbo) this.startStiff(p); else this.startSpin(p); }
+      else if (inp.special) { if (inp.turbo) this.lateral(p); else this.startJump(p); }
       return;
     }
     if (b.state === 'air' && b.kind === 'pass') {
@@ -600,6 +640,32 @@
     p.spinT = 0.45; p.spinCD = 1.1;
     this.emit('spin', { p: p });
   };
+  G.startStiff = function (p) {
+    if (p.spinCD > 0 || p.state !== 'ok') return;
+    p.stiffT = 0.45; p.spinCD = 1.0;
+    this.emit('stiff', { p: p });
+  };
+
+  // Pitch the ball to the best trailing teammate (any time after the catch / handoff).
+  G.lateral = function (p) {
+    if (this.playType !== 'kickoff' && p.role === 'QB' && !this.passThrown && !this.handedOff && this.relX(p.x) <= 0.5) return false;
+    var dir = dirOf(p.team), best = null, bs = -1e9, self = this;
+    this.players.forEach(function (q) {
+      if (q.team !== p.team || q === p || q.state !== 'ok' || q.eng) return;
+      var d = dist(p, q), behind = (p.x - q.x) * dir;
+      if (d > 11 || d < 1.5 || behind < -1) return;
+      var s = self.openness(q) - d * 0.3 + behind * 0.2;
+      if (s > bs) { bs = s; best = q; }
+    });
+    if (!best) return false;
+    var b = this.ball;
+    b.state = 'pitch'; b.holder = null; b.kind = 'lateral';
+    b.sx = p.x; b.sy = p.y; b.sz = 1.1; b.t = 0; b.T = 0.32 + dist(p, best) * 0.025; b.peak = 0.8; b.target = best;
+    b.tx = best.x + best.vx * b.T; b.ty = best.y + best.vy * b.T; b.tz = 1.1;
+    this.emit('lateral', { p: p, to: best });
+    return true;
+  };
+
   G.startJump = function (p) {
     if (p.jumpT > 0 || p.state !== 'ok') return;
     p.jumpT = 0.55; p.jumpAt = this.time;
@@ -643,13 +709,16 @@
     if (turbo) sp *= TURBO_MUL;
     if (p.eng) sp *= 0.22;
     if (p.spinT > 0) { p.spinT -= dt; sp *= 0.92; }
+    if (p.stiffT > 0) p.stiffT -= dt;
+    if (this.weather === 'rain') sp *= 0.97;
+    if (this.weather === 'snow') sp *= 0.95;
     if (p.stumble > 0) { p.stumble -= dt; sp *= 0.5; }
     var wl = len(p.want.x, p.want.y), tx = 0, ty = 0;
     if (wl > 0.02) {
       var m = Math.min(1, wl) * p.wantSpeed;
       tx = p.want.x / wl * sp * m; ty = p.want.y / wl * sp * m;
     }
-    var accel = 14 + p.r.agi * 0.14;
+    var accel = (14 + p.r.agi * 0.14) * (this.weather === 'snow' ? 0.82 : this.weather === 'rain' ? 0.92 : 1);
     if (turbo) accel *= 1.15;
     var dvx = tx - p.vx, dvy = ty - p.vy, dl = len(dvx, dvy), mx = accel * dt;
     if (dl > mx) { dvx *= mx / dl; dvy *= mx / dl; }
@@ -774,9 +843,11 @@
     this.emit('pitch', {});
   };
 
-  G.throwTo = function (qb, rec) {
+  // bullet = turbo pass: a harder, flatter throw that is a little less accurate
+  G.throwTo = function (qb, rec, bullet) {
     var b = this.ball;
     var sp = clamp(17 + (qb.r.thp - 60) / 39 * 9, 15, 27);
+    if (bullet) sp += 5;
     if (this.fire[qb.team]) sp += 2;
     var tx = rec.x, ty = rec.y, t = 0;
     for (var i = 0; i < 4; i++) {
@@ -793,12 +864,15 @@
     if (pressure < 2.2) err *= 1.5;
     if (len(qb.vx, qb.vy) > 4) err *= 1.25;
     if (this.fire[qb.team]) err *= 0.55;
+    if (bullet) err *= 1.25;
+    if (this.weather === 'rain' || this.weather === 'snow') err *= 1.12;
     var a = Math.random() * Math.PI * 2, m = err * Math.sqrt(Math.random());
     tx += Math.cos(a) * m; ty += Math.sin(a) * m;
     d = len(tx - qb.x, ty - qb.y);
     b.state = 'air'; b.kind = 'pass'; b.holder = null;
     b.sx = qb.x; b.sy = qb.y; b.sz = 1.9; b.tx = tx; b.ty = ty; b.tz = 1.3;
-    b.t = 0; b.T = d / sp + 0.08; b.peak = clamp(d * 0.085, 0.3, 6.5);
+    b.t = 0; b.T = d / sp + 0.08; b.peak = clamp(d * (bullet ? 0.035 : 0.085), 0.3, bullet ? 2.5 : 6.5);
+    b.bullet = !!bullet;
     b.target = rec; b.thrower = qb;
     this.passThrown = true;
     this.passTarget = null;
@@ -844,7 +918,14 @@
       b.x = b.sx + (b.tx - b.sx) * s; b.y = b.sy + (b.ty - b.sy) * s;
       b.z = b.sz + (b.tz - b.sz) * s + b.peak * 4 * s * (1 - s);
       if (s >= 1) {
-        if (b.state === 'pitch') { this.giveBall(b.target, false); return; }
+        if (b.state === 'pitch') {
+          var tg = b.target;
+          if (tg && tg.state === 'ok' && dist(tg, b) < 2.4) { this.giveBall(tg, false); if (b.kind === 'lateral') this.log.rusher = tg; return; }
+          // botched pitch: the ball is on the ground and anyone can grab it
+          b.state = 'loose'; b.vx = rnd(-2, 2); b.vy = rnd(-2, 2); b.vz = 3; b.looseT = 0; b.fromKick = false;
+          this.emit('fumble', { p: tg || b.thrower });
+          return;
+        }
         if (b.kind === 'kick') this.kickArrive();
         else this.passArrive();
       }
@@ -860,14 +941,19 @@
       if (b.z < 1.4) {
         this.players.forEach(function (p) {
           if (picked || p.state !== 'ok' || dist(p, b) > 1.0) return;
-          if (self.playType === 'kickoff' && b.fromKick && p.team !== self.poss && b.looseT < 1.5) return;
-          if (Math.random() < 0.18) picked = p;
+          if (self.playType === 'kickoff' && b.fromKick && !b.onside && p.team !== self.poss && b.looseT < 1.5) return;
+          // onside kicks: the kicking team has to fight for it
+          var chance = (b.onside && p.team !== self.poss) ? 0.07 : 0.18;
+          if (Math.random() < chance) picked = p;
         });
       }
       if (picked) {
         var lost = picked.team !== this.ballTeam;
         this.giveBall(picked, false);
-        if (b.fromKick) { b.fromKick = false; }
+        if (b.fromKick) {
+          b.fromKick = false;
+          if (b.onside) { b.onside = false; this.emit(picked.team === this.poss ? 'onsidefail' : 'onsidegood', { team: picked.team }); }
+        }
         else if (lost) { this.log.fumbleLost = true; this.stats.team[1 - picked.team].fumbles++; this.emit('recovered', { team: picked.team }); }
         else this.emit('recoveredOwn', {});
       } else if (b.looseT > 6) {
@@ -878,6 +964,11 @@
 
   G.kickArrive = function () {
     var b = this.ball, r = this.returner;
+    if (b.onside) {
+      b.state = 'loose'; b.vx = rnd(-2.5, 2.5) + 2 * dirOf(this.kickTeam); b.vy = rnd(-3, 3); b.vz = 4; b.looseT = 0; b.fromKick = true;
+      this.emit('bounce', {});
+      return;
+    }
     if (r && r.state === 'ok' && dist(r, b) < 2.6) {
       this.giveBall(r, false);
       this.emit('catch', { p: r, kick: true });
@@ -916,6 +1007,8 @@
       this.players.forEach(function (p) { if (p.team !== o && p.state === 'ok' && dist(p, bestO) < 1.3) close++; });
       var pc = 0.64 + (bestO.r.cth - 60) / 100 + jumpBonus(bestO) - close * 0.17 - (dO > 1.15 ? 0.14 : 0);
       if (this.fire[o]) pc += 0.12;
+      if (this.weather === 'rain' || this.weather === 'snow') pc -= 0.06;
+      if (b.bullet) pc -= 0.04;
       if (Math.random() < clamp(pc, 0.12, 0.98)) { this.complete(bestO); return; }
     }
     this.incomplete(null);
@@ -989,13 +1082,18 @@
       if (d.state === 'dive') p += 0.24;
       if (d.wantTurbo || d.humanTurbo) p += 0.07;
       if (c.spinT > 0) p -= 0.42;
+      if (c.stiffT > 0) {
+        // stiff-arm works on tacklers in front of the carrier
+        var fx = Math.cos(c.face), fy = Math.sin(c.face), dd = dist(d, c) || 1;
+        if (((d.x - c.x) * fx + (d.y - c.y) * fy) / dd > 0.2) p -= 0.36;
+      }
       if (this.fire[c.team]) p -= 0.14;
       if (this.fire[d.team]) p += 0.12;
       if (c.role === 'QB' && !this.passThrown && !this.handedOff && this.playType !== 'kickoff' && this.relX(c.x) < 0) p += 0.15;
       p = clamp(p, 0.12, 0.97);
       if (Math.random() < p) { this.tackle(c, d); return; }
       d.tackleCD = 0.65;
-      if (d.state === 'ok') { d.state = 'down'; d.st = 0.45; }
+      if (d.state === 'ok') { d.state = 'down'; d.st = c.stiffT > 0 ? 0.9 : 0.45; }
       c.stumble = 0.28;
       this.emit('broken', { p: c });
     }
@@ -1081,6 +1179,10 @@
   G.thinkKickoff = function (p) {
     var b = this.ball;
     var carrier = b.state === 'held' ? b.holder : null;
+    // loose kick (onside or muffed): everybody scrambles for it
+    if (b.state === 'loose') { this.goTo(p, b.x, b.y, true); return; }
+    // hands team reacts to an onside kick in the air
+    if (b.state === 'air' && b.onside && p.team === this.poss) { this.goTo(p, b.tx, b.ty, true); return; }
     if (p.team === this.kickTeam) {
       if (carrier) { this.pursue(p, carrier); return; }
       var tx = b.state === 'air' ? b.tx : b.x, ty = b.state === 'air' ? b.ty : b.y;
@@ -1126,7 +1228,7 @@
       else if (pressure < 2.0 && t > 0.6 && bestOpen > 1.4) throwIt = true;
     }
     if (throwIt && bestOpen < 1.6 && t > 3.4) { this.throwAway(p); return; }
-    if (throwIt) { this.throwTo(p, best); return; }
+    if (throwIt) { this.throwTo(p, best, bestOpen < 2.6 && dist(p, best) < 16 && Math.random() < 0.6); return; }
     if (pressure < 3.2 && dropped) {
       // escape pressure
       var ex = 0, ey = 0;
@@ -1175,7 +1277,8 @@
     p.want.x = fx / l; p.want.y = fy / l;
     if ((fx * dir) < 0.15) p.want.x = dir * 0.3;
     p.wantTurbo = nearest < 7 || this.fire[t];
-    if (nearest < 1.7 && p.spinCD <= 0 && Math.random() < 0.05) this.startSpin(p);
+    if (nearest < 1.7 && p.spinCD <= 0 && Math.random() < 0.05) { if (Math.random() < 0.4) this.startStiff(p); else this.startSpin(p); }
+    if (nearest < 1.3 && Math.random() < 0.006 && this.lateral(p)) return;
     if (nearest < 2.2 && p.jumpT <= 0 && Math.random() < 0.012) this.startJump(p);
   };
 
@@ -1715,7 +1818,7 @@
   G.cpuStep = function (dt) {
     if (this.phase === 'select' && this.selectWait <= 0) {
       var offH = this.isHuman(this.poss), defH = this.isHuman(1 - this.poss);
-      if (!offH && !defH) this.choosePlays(FB.AI.pickOffense(this), FB.AI.pickDefense(this));
+      if (!offH && !defH) this.choosePlays(FB.AI.pickOffense(this), FB.AI.pickDefense(this), Math.random() < 0.5);
     }
     if (this.phase === 'pat' && !this.isHuman(this.patTeam)) {
       this.patWait -= dt;

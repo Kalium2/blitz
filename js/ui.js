@@ -29,6 +29,7 @@
           el.addEventListener('click', function (e) {
             if (el.tagName === 'A' && el.id === 'download-link') { FB.Audio.play('select'); return; }
             e.preventDefault();
+            if (el.blur) el.blur();
             self.focus[scr.id] = i;
             self.refreshFocus(scr.id);
             FB.Audio.init();
@@ -224,23 +225,25 @@
       this.ps = { game: game, panels: [], done: done };
       humans.forEach(function (h) {
         var off = h.side === 'off';
-        var list = off ? FB.Plays.OFFENSE.concat(FB.Plays.SPECIAL) : FB.Plays.DEFENSE;
+        var list = off ? FB.Plays.OFFENSE.concat(FB.Plays.SPECIAL, [FB.Plays.customPlay(FB.loadCustomPlay())]) : FB.Plays.DEFENSE;
         var panel = document.createElement('div');
         panel.className = 'play-panel p' + (h.slot + 1);
         var t = game.teams[h.team];
         var sit = game.conversion ? '2-PT TRY' : (FB.ordinal(game.down) + ' & ' + (game.isGoalToGo() ? 'GOAL' : game.toGo()) + ' • ' + FB.spotLabel(game));
-        panel.innerHTML = '<div class="pp-head"><span class="side">P' + (h.slot + 1) + ' ' + esc(t.abbr) + ' ' + (off ? 'OFFENSE' : 'DEFENSE') + '</span><span class="sit">' + esc(sit) + '</span></div>' +
+        panel.innerHTML = '<div class="pp-head"><span class="side">P' + (h.slot + 1) + ' ' + esc(t.abbr) + ' ' + (off ? 'OFFENSE' : 'DEFENSE') + '</span>' +
+          (off ? '<span class="flip-tag">TURBO: FLIP</span>' : '') + '<span class="sit">' + esc(sit) + '</span></div>' +
           '<div class="pp-grid"></div>' + (off ? '<div class="pp-special"></div>' : '');
         var grid = $('.pp-grid', panel), spec = $('.pp-special', panel);
         var cards = [];
+        var pd = { h: h, list: list, cards: cards, index: 0, locked: false, el: panel, off: off, flip: false, turboPrev: true };
         list.forEach(function (play, i) {
           var card = document.createElement('div');
-          var special = play.type === 'punt' || play.type === 'fg';
-          card.className = 'pcard' + (special ? ' sp' : '');
-          if (special) {
-            var sub = play.type === 'fg' ? (game.fgDistance() + ' YD ATTEMPT') : 'FLIP THE FIELD';
+          card.className = 'pcard' + (play.special ? ' sp' : '');
+          if (play.special) {
+            var fgd = game.fgDistance();
+            var sub = { punt: 'FLIP THE FIELD', fg: fgd + ' YD ATTEMPT', fakepunt: 'SURPRISE!', fakefg: 'SURPRISE!', custom: 'YOUR DESIGN' }[play.id] || '';
             card.innerHTML = '<div class="pn">' + esc(play.name) + '</div><div class="sub">' + sub + '</div>';
-            var disabled = game.conversion || (play.type === 'fg' && game.fgProb(game.fgDistance()) <= 0);
+            var disabled = (game.conversion && play.id !== 'custom') || (play.id === 'fg' && game.fgProb(fgd) <= 0);
             if (disabled) card.classList.add('disabled');
             card.dataset.disabled = disabled ? '1' : '';
             spec.appendChild(card);
@@ -251,20 +254,34 @@
             var pn = document.createElement('div'); pn.className = 'pn'; pn.textContent = play.name;
             card.appendChild(pn);
             grid.appendChild(card);
-            self.drawDiagram(cv, play, off);
+            self.drawDiagram(cv, play, off, false);
           }
           card.addEventListener('click', function () {
-            var pd = self.ps.panels.filter(function (x) { return x.h === h; })[0];
-            if (!pd || pd.locked || card.dataset.disabled) return;
+            if (pd.locked || card.dataset.disabled) return;
             pd.index = i; self.refreshPlays(); self.lockPlay(pd);
           });
           cards.push(card);
         });
+        if (off) {
+          var tag = $('.flip-tag', panel);
+          tag.addEventListener('click', function () { self.toggleFlip(pd); });
+        }
         root.appendChild(panel);
-        self.ps.panels.push({ h: h, list: list, cards: cards, index: 0, locked: false, el: panel, off: off });
+        self.ps.panels.push(pd);
       });
       this.refreshPlays();
       this.show('plays');
+    },
+
+    toggleFlip: function (pd) {
+      if (!pd.off || pd.locked) return;
+      pd.flip = !pd.flip;
+      var self = this;
+      pd.cards.forEach(function (c, i) { var cv = c.querySelector('canvas'); if (cv) self.drawDiagram(cv, pd.list[i], true, pd.flip); });
+      var tag = $('.flip-tag', pd.el);
+      tag.textContent = pd.flip ? 'FLIPPED ⇄' : 'TURBO: FLIP';
+      tag.classList.toggle('on', pd.flip);
+      FB.Audio.play('switch');
     },
 
     refreshPlays: function () {
@@ -283,12 +300,19 @@
       var all = this.ps.panels.every(function (x) { return x.locked; });
       if (all) {
         var res = {};
-        this.ps.panels.forEach(function (x) { res[x.off ? 'off' : 'def'] = x.list[x.index]; });
+        this.ps.panels.forEach(function (x) { res[x.off ? 'off' : 'def'] = x.list[x.index]; if (x.off) res.flip = x.flip; });
         this.hide('plays');
         var done = this.ps.done;
         this.ps = null;
         done(res);
       }
+    },
+
+    // Rows: three rows of three diagrams, then the special-teams row.
+    playRows: function (pd) {
+      var rows = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
+      if (pd.cards.length > 9) { var r = []; for (var i = 9; i < pd.cards.length; i++) r.push(i); rows.push(r); }
+      return rows;
     },
 
     playInput: function (inputs) {
@@ -301,39 +325,36 @@
           if (inp.back) { pd.locked = false; self.refreshPlays(); }
           return;
         }
-        var n = pd.cards.length, i = pd.index;
-        var hasSpec = pd.off;
+        if (inp.turbo && !pd.turboPrev) self.toggleFlip(pd);
+        pd.turboPrev = !!inp.turbo;
+        var rows = self.playRows(pd), R = 0, C = 0;
+        rows.forEach(function (row, ri) { var ci = row.indexOf(pd.index); if (ci >= 0) { R = ri; C = ci; } });
+        var ok = function (i) { return pd.cards[i] && !pd.cards[i].dataset.disabled; };
+        var i = pd.index;
         if (inp.navX) {
-          if (i < 9) { var col = i % 3, row = Math.floor(i / 3); col = (col + inp.navX + 3) % 3; i = row * 3 + col; }
-          else i = i === 9 ? 10 : 9;
+          var row = rows[R];
+          for (var k = 1; k <= row.length; k++) { var c2 = ((C + inp.navX * k) % row.length + row.length) % row.length; if (ok(row[c2])) { i = row[c2]; break; } }
         }
         if (inp.navY) {
-          if (inp.navY < 0) { // down
-            if (i < 6) i += 3;
-            else if (i < 9 && hasSpec) i = i === 6 ? 9 : (i === 8 ? 10 : 9);
-            else if (i >= 9) i = i === 9 ? 0 : 2;
-            else i -= 6;
-          } else {
-            if (i >= 9) i = i === 9 ? 6 : 8;
-            else if (i >= 3) i -= 3;
-            else if (hasSpec) i = i === 2 ? 10 : 9;
-            else i += 6;
+          var step = inp.navY < 0 ? 1 : -1; // stick down moves to the next row
+          for (var t = 1; t <= rows.length; t++) {
+            var nr = ((R + step * t) % rows.length + rows.length) % rows.length, nrow = rows[nr];
+            var nc = Math.round(C * (nrow.length - 1) / Math.max(1, rows[R].length - 1));
+            var cand = nrow[nc];
+            if (!ok(cand)) cand = nrow.filter(ok)[0];
+            if (cand != null) { i = cand; break; }
           }
         }
-        // skip disabled specials
-        if (i >= 9 && pd.cards[i] && pd.cards[i].dataset.disabled) {
-          var other = i === 9 ? 10 : 9;
-          i = pd.cards[other] && !pd.cards[other].dataset.disabled ? other : (inp.navY > 0 ? 6 : 0);
-        }
         if (i !== pd.index) { pd.index = i; FB.Audio.play('menu'); self.refreshPlays(); }
-        if (inp.action && !pd.cards[pd.index].dataset.disabled) self.lockPlay(pd);
+        if (inp.action && ok(pd.index)) self.lockPlay(pd);
       });
     },
 
     // Route diagram for a play card.
-    drawDiagram: function (cv, play, off) {
+    drawDiagram: function (cv, play, off, flip) {
       var ctx = cv.getContext('2d'), W = cv.width, H = cv.height;
-      var X = function (dy) { return W / 2 + dy * 3.6; };
+      var fs = flip ? -1 : 1;
+      var X = function (dy) { return W / 2 + dy * 3.6 * fs; };
       var Y = function (dx) { return H * 0.7 - dx * 1.9; };
       ctx.fillStyle = '#1b5a2a'; ctx.fillRect(0, 0, W, H);
       ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
@@ -414,6 +435,60 @@
       }
     },
 
+    // ====================================================== CREATE-A-PLAY
+    cp: null,
+    CP_ROLES: [['WR1', 'LEFT WIDEOUT'], ['WR2', 'RIGHT WIDEOUT'], ['TE', 'TIGHT END'], ['RB', 'RUNNING BACK']],
+
+    openCreatePlay: function () {
+      this.cp = { sel: FB.loadCustomPlay(), row: 0, btn: 0 };
+      var self = this, rows = $('#cp-rows');
+      rows.innerHTML = '';
+      this.CP_ROLES.forEach(function (r, i) {
+        var el = document.createElement('div');
+        el.className = 'cp-row';
+        el.innerHTML = '<span class="cp-role">' + r[1] + '</span><button class="tp-arrow sm" data-d="-1">&#9664;</button><span class="cp-route"></span><button class="tp-arrow sm" data-d="1">&#9654;</button>';
+        $$('button', el).forEach(function (b) { b.addEventListener('click', function () { self.cp.row = i; self.cycleRoute(i, +b.getAttribute('data-d')); }); });
+        rows.appendChild(el);
+      });
+      this.renderCreatePlay();
+      this.show('createplay');
+    },
+
+    cycleRoute: function (i, d) {
+      var role = this.CP_ROLES[i][0], names = FB.Plays.ROUTE_NAMES;
+      var k = names.indexOf(this.cp.sel[role]);
+      this.cp.sel[role] = names[((k + d) % names.length + names.length) % names.length];
+      FB.Audio.play('menu');
+      this.renderCreatePlay();
+    },
+
+    renderCreatePlay: function () {
+      var cp = this.cp, self = this;
+      $$('#cp-rows .cp-row').forEach(function (el, i) {
+        $('.cp-route', el).textContent = cp.sel[self.CP_ROLES[i][0]];
+        el.classList.toggle('focus', cp.row === i);
+      });
+      this.focus.createplay = cp.row === 4 ? cp.btn : -1;
+      this.refreshFocus('createplay');
+      var cv = $('#cp-canvas');
+      this.drawDiagram(cv, FB.Plays.customPlay(cp.sel), true, false);
+    },
+
+    createPlayInput: function (inp) {
+      var cp = this.cp;
+      if (!cp) return;
+      if (inp.back) { this.onAction('createplay', 'back'); return; }
+      if (inp.navY) { cp.row = (cp.row - inp.navY + 5) % 5; FB.Audio.play('menu'); this.renderCreatePlay(); }
+      if (inp.navX) {
+        if (cp.row < 4) this.cycleRoute(cp.row, inp.navX);
+        else { cp.btn = 1 - cp.btn; this.renderCreatePlay(); }
+      }
+      if (inp.action) {
+        if (cp.row < 4) { cp.row++; this.renderCreatePlay(); }
+        else $$('#createplay .menu-item')[cp.btn].click();
+      }
+    },
+
     // ============================================================ FINAL
     renderFinal: function (game) {
       var t = game.teams, s = game.score, st = game.stats.team;
@@ -435,6 +510,20 @@
       html += '<table class="stat-table"><tr><th></th><th>' + esc(t[0].abbr) + '</th><th>' + esc(t[1].abbr) + '</th></tr>';
       rows.forEach(function (r) { html += '<tr><td>' + r[0] + '</td><td>' + r[1](st[0]) + '</td><td>' + r[1](st[1]) + '</td></tr>'; });
       html += '</table>';
+      // stat leaders
+      var P = game.stats.players, leaders = [
+        ['PASSING', function (x) { return x.passYds; }, function (x) { return x.comp + '/' + x.att + ', ' + x.passYds + ' YDS, ' + x.passTD + ' TD'; }],
+        ['RUSHING', function (x) { return x.rushYds; }, function (x) { return x.rushYds + ' YDS' + (x.rushTD ? ', ' + x.rushTD + ' TD' : ''); }],
+        ['RECEIVING', function (x) { return x.recYds + x.rec; }, function (x) { return x.rec + ' REC, ' + x.recYds + ' YDS' + (x.recTD ? ', ' + x.recTD + ' TD' : ''); }],
+        ['DEFENSE', function (x) { return x.tak + x.sacks * 3 + x.ints * 4; }, function (x) { return x.tak + ' TKL' + (x.sacks ? ', ' + x.sacks + ' SACK' : '') + (x.ints ? ', ' + x.ints + ' INT' : ''); }]
+      ];
+      var lrows = '';
+      leaders.forEach(function (L) {
+        var best = null, bv = 0;
+        Object.keys(P).forEach(function (id) { var x = P[id]; if (x.name.charAt(0) === '#') return; var v = L[1](x); if (v > bv) { bv = v; best = x; } });
+        if (best) lrows += '<tr><td>' + L[0] + '</td><td class="ld"><b>' + esc(best.name.toUpperCase()) + '</b> <small>' + esc(t[best.team].abbr) + '</small></td><td>' + esc(L[2](best)) + '</td></tr>';
+      });
+      if (lrows) html += '<table class="stat-table leaders"><tr><th>LEADERS</th><th></th><th></th></tr>' + lrows + '</table>';
       var m = game.mvp();
       if (m) {
         var line = [];
@@ -447,6 +536,18 @@
       }
       $('#final-body').innerHTML = html;
     }
+  };
+
+  FB.loadCustomPlay = function () {
+    var sel = Object.assign({}, FB.Plays.DEFAULT_CUSTOM);
+    try {
+      var o = JSON.parse(localStorage.getItem('fb26-myplay') || 'null');
+      if (o) Object.keys(sel).forEach(function (k) { if (FB.Plays.ROUTES[o[k]]) sel[k] = o[k]; });
+    } catch (e) { /* storage unavailable */ }
+    return sel;
+  };
+  FB.saveCustomPlay = function (sel) {
+    try { localStorage.setItem('fb26-myplay', JSON.stringify(sel)); } catch (e) { /* ignore */ }
   };
 
   FB.ordinal = function (n) { return ['1ST', '2ND', '3RD', '4TH'][n - 1] || (n + 'TH'); };

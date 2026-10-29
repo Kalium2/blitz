@@ -165,8 +165,15 @@
       def: [P('DeMarcus Lawrence', 'EDGE', 9, ['rusher']), P('Leonard Williams', 'DT', 8.5, ['power']), P('Ernest Jones IV', 'LB', 14), P('Devon Witherspoon', 'CB', 10, ['tackler']), P('Nick Emmanwori', 'S', 9.5)] }
   ];
 
+  // Secret team (unlocked with a code on the title screen). Every name here is
+  // fictional; the ratings are built from the same template as everyone else.
+  var HIDDEN = { abbr: 'BLZ', city: 'Blitz', name: 'Legends', conf: 'Secret Team', hidden: true,
+    c: { jersey: '#111111', trim: '#FFD23A', helmet: '#FFD23A', pants: '#111111', stripe: '#FF4D1F' },
+    off: [P('Ace Inferno', 'QB', 25, ['scrambler', 'cannon']), P('Rocket Ramirez', 'RB', 25, ['burner', 'elusive']), P('Neon Nova', 'WR', 22, ['burner', 'hands']), P('Flash Fontaine', 'WR', 21, ['burner']), P('Tank Titan', 'TE', 18, ['power', 'hands'])],
+    def: [P('Hammer Hollister', 'EDGE', 14, ['rusher']), P('Boulder Bronson', 'DT', 12, ['power']), P('Blitz Barrow', 'LB', 17, ['tackler']), P('Lockdown Lux', 'CB', 11, ['ballhawk']), P('Ghost Galloway', 'S', 14, ['ballhawk', 'tackler'])] };
+
   // Expand compact entries into full players using the shared template.
-  TEAMS.forEach(function (t) {
+  TEAMS.concat([HIDDEN]).forEach(function (t) {
     t.offense = t.off.map(function (e, i) { return FB.Template.buildPlayer(e, t.abbr, 'O' + i); });
     t.defense = t.def.map(function (e, i) { return FB.Template.buildPlayer(e, t.abbr, 'D' + i); });
     t.ol = [FB.Template.genericPlayer('OL', t.abbr, 'OL0'), FB.Template.genericPlayer('OL', t.abbr, 'OL1')];
@@ -181,5 +188,6 @@
   });
 
   FB.TEAMS = TEAMS;
+  FB.HIDDEN_TEAM = HIDDEN;
   FB.ROSTER_DATE = 'Week 8 depth charts, late October 2026';
 })();

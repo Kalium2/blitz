@@ -12,7 +12,10 @@
   var FORMATIONS = {
     gun:    { QB: [-5, 0], RB: [-5, 2.6], WR1: [-0.8, -17], WR2: [-0.8, 16], TE: [-0.8, 5], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] },
     under:  { QB: [-1.4, 0], RB: [-5.5, 0], WR1: [-0.8, -17], WR2: [-0.8, 16], TE: [-0.8, 4.6], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] },
-    spread: { QB: [-5, 0], RB: [-5, -2.6], WR1: [-0.8, -20], WR2: [-0.8, 20], TE: [-0.8, -9], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] }
+    spread: { QB: [-5, 0], RB: [-5, -2.6], WR1: [-0.8, -20], WR2: [-0.8, 20], TE: [-0.8, -9], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] },
+    // special-teams looks used by the fakes
+    punt:   { QB: [-12, 0], RB: [-3, -2], WR1: [-0.8, -22], WR2: [-0.8, 22], TE: [-0.8, 4], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] },
+    fakefg: { QB: [-7, 0], RB: [-7, 2.2], WR1: [-0.8, -7], WR2: [-0.8, 7], TE: [-0.8, 3.4], OL0: [-0.6, -1.6], OL1: [-0.6, 1.6] }
   };
 
   // Defensive alignment (offense-relative, dx > 0 is the defense's side).
@@ -47,9 +50,48 @@
   ];
 
   var SPECIAL = [
-    { id: 'punt', name: 'PUNT', type: 'punt' },
-    { id: 'fg', name: 'FIELD GOAL', type: 'fg' }
+    { id: 'punt', name: 'PUNT', type: 'punt', special: true },
+    { id: 'fg', name: 'FIELD GOAL', type: 'fg', special: true },
+    { id: 'fakepunt', name: 'FAKE PUNT', type: 'pass', form: 'punt', special: true, primary: 'WR2', drop: 6.5,
+      routes: { WR1: [[12, 0], [20, 6]], WR2: [[26, 0]], TE: [[6, 0], [8, -7]], RB: [[1, -4], [3, -10]] },
+      cont: { WR1: true, WR2: true } },
+    { id: 'fakefg', name: 'FAKE FG', type: 'pass', form: 'fakefg', special: true, primary: 'TE', drop: 5,
+      routes: { TE: [[2, 0], [4, 11]], WR1: [[10, 0], [17, -7]], WR2: [[10, 0], [17, 7]], RB: [[1, 7], [4, 13]] },
+      cont: { WR1: true, WR2: true } }
   ];
+
+  // ---------------------------------------------------- create-a-play
+  // Route shapes in yards; dy > 0 means "toward the middle of the field".
+  var ROUTES = {
+    GO: { pts: [[32, 0]], cont: true },
+    SLANT: { pts: [[3, 0], [9, 7]], cont: true },
+    OUT: { pts: [[8, 0], [8, -9]] },
+    IN: { pts: [[8, 0], [8, 12]], cont: true },
+    CURL: { pts: [[12, 0], [10, 1]] },
+    POST: { pts: [[12, 0], [24, 9]], cont: true },
+    CORNER: { pts: [[12, 0], [22, -9]], cont: true },
+    FLAT: { pts: [[1, -3], [3, -10]] },
+    WHEEL: { pts: [[1, -5], [18, -7]], cont: true },
+    BLOCK: { block: true }
+  };
+  var ROUTE_NAMES = Object.keys(ROUTES);
+  var DEFAULT_CUSTOM = { WR1: 'POST', WR2: 'CORNER', TE: 'IN', RB: 'FLAT' };
+
+  // Build a playable play from { role: routeName }.
+  function customPlay(sel) {
+    sel = sel || DEFAULT_CUSTOM;
+    var F = FORMATIONS.gun, play = { id: 'custom', name: 'MY PLAY', type: 'pass', form: 'gun', special: true, routes: {}, cont: {}, block: {}, primary: null };
+    ['WR1', 'WR2', 'TE', 'RB'].forEach(function (role) {
+      var r = ROUTES[sel[role]] || ROUTES.GO;
+      var inward = F[role][1] < 0 ? 1 : -1;
+      if (r.block) { play.block[role] = true; return; }
+      play.routes[role] = r.pts.map(function (pt) { return [pt[0], pt[1] * inward]; });
+      if (r.cont) play.cont[role] = true;
+      if (!play.primary) play.primary = role;
+    });
+    if (!play.primary) play.primary = 'WR1';
+    return play;
+  }
 
   // Defensive assignments: 'rush', 'spy', 'runfit', {man: role}, {zone: [dx, dy]}
   var DEFENSE = [
@@ -64,5 +106,6 @@
     { id: 'spy', name: 'QB SPY', a: { F1: 'rush', F2: 'rush', NT: 'rush', M: 'spy', B1: { man: 'WR1' }, DB: { man: 'WR2' }, B2: { zone: [20, 0] } } }
   ];
 
-  FB.Plays = { FORMATIONS: FORMATIONS, DEF_ALIGN: DEF_ALIGN, OFFENSE: OFFENSE, SPECIAL: SPECIAL, DEFENSE: DEFENSE };
+  FB.Plays = { FORMATIONS: FORMATIONS, DEF_ALIGN: DEF_ALIGN, OFFENSE: OFFENSE, SPECIAL: SPECIAL, DEFENSE: DEFENSE,
+    ROUTES: ROUTES, ROUTE_NAMES: ROUTE_NAMES, DEFAULT_CUSTOM: DEFAULT_CUSTOM, customPlay: customPlay };
 })();

@@ -185,6 +185,25 @@
     this.drawEntities(g, dt);
     this.updateParticles(dt, g);
     if (this.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + (this.flash * 0.35) + ')'; ctx.fillRect(0, 0, this.W, this.H); }
+    this.drawWeather(dt);
+  };
+
+  R.drawWeather = function (dt) {
+    var w = this.weather, ctx = this.ctx;
+    if (!w || w === 'clear') return;
+    if (w === 'fog') { ctx.fillStyle = 'rgba(160,170,190,0.28)'; ctx.fillRect(0, 0, this.W, this.H); return; }
+    this.wxT = (this.wxT || 0) + dt;
+    ctx.save();
+    ctx.strokeStyle = w === 'rain' ? 'rgba(180,200,255,0.45)' : 'rgba(255,255,255,0.85)';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = 1;
+    for (var i = 0; i < 160; i++) {
+      var sx = (i * 97.3 + this.wxT * (w === 'rain' ? 120 : 15)) % this.W;
+      var sy = (i * 61.7 + this.wxT * (w === 'rain' ? 900 : 60) * (0.6 + (i % 5) * 0.1)) % this.H;
+      if (w === 'rain') { ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 3, sy + 14); ctx.stroke(); }
+      else { ctx.beginPath(); ctx.arc(sx, sy, 1.6 + (i % 3), 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.restore();
   };
 
   R.drawBackground = function (g) {
@@ -394,7 +413,7 @@
     ctx.fillStyle = c.trim;
     ctx.fillRect(-0.22 * u * wScale, -1.3 * u, 0.44 * u * wScale, 0.07 * u);
     // helmet
-    var hx = fy * 0.05 * u, hy = -1.78 * u, hr = 0.23 * u;
+    var hx = fy * 0.05 * u, hy = -1.78 * u, hr = 0.23 * u * (FB.cheats && FB.cheats.bigHeads ? 1.8 : 1);
     ctx.fillStyle = c.helmet;
     ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = Math.max(1, u * 0.03); ctx.stroke();
@@ -558,6 +577,27 @@
   };
 
   R.reset = function () { this.banners = []; this.particles = []; this.cam.init = false; };
+
+  R.setWeather = function (w) { this.weather = w || 'clear'; };
+
+  // "INSTANT REPLAY" bug with letterbox bars.
+  R.drawReplayBug = function (age, skipText) {
+    var ctx = this.ctx, W = this.W, H = this.H, bar = Math.min(1, age * 4) * H * 0.07;
+    ctx.save();
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bar); ctx.fillRect(0, H - bar, W, bar);
+    var x = 18, y = bar + 14;
+    ctx.fillStyle = 'rgba(10,13,31,0.85)'; roundRect(ctx, x, y, 196, 34, 6); ctx.fill();
+    ctx.fillStyle = '#ff2d2d'; ctx.fillRect(x, y, 6, 34);
+    if (Math.floor(age * 2) % 2 === 0) { ctx.beginPath(); ctx.arc(x + 24, y + 17, 6, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = '#fff'; ctx.font = 'italic 900 15px "Russo One", "Arial Black", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('INSTANT REPLAY', x + 38, y + 18);
+    if (skipText && bar > 20) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '700 13px "Russo One", "Arial Black", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(skipText, W / 2, H - bar / 2);
+    }
+    ctx.restore();
+  };
 
   // Broadcast-style score bug (bottom center, or top when touch controls are showing).
   R.drawHUD = function (g, opts) {

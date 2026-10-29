@@ -10,7 +10,11 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - All **32 NFL teams with 2026 rosters**, using starters from late-October 2026 (Week 8) depth charts.
 - Every player is built from one **character template**, and their ratings come from **fantasy stats** (see below).
 - 1 player vs CPU (3 skill levels) or 2 players on one machine. Keyboard, gamepad and touch all work.
-- 9 offensive plays plus punt and field goal; 9 defensive calls. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
+- 9 offensive plays plus punt, field goal, **fake punt**, **fake field goal** and **MY PLAY** (from the **Create a Play** editor); 9 defensive calls. Any offensive play can be **flipped** (TURBO on play select).
+- Arcade moves: **bullet passes** (hold TURBO when throwing), **stiff-arms** (TURBO+ACTION), **laterals** (TURBO+SPECIAL), spins, hurdles, dive tackles and late hits. **Audibles** at the line (SPECIAL) for offense and defense. **Onside kicks** (SPECIAL when kicking off).
+- **Instant replay** of big plays (touchdowns, interceptions, onside recoveries, 25+ yard gains) from a low sideline camera.
+- **Extras:** big heads, infinite turbo, weather (rain, snow, fog, random; rain and snow affect footing, throwing and catching) and a secret, fully fictional team unlocked with a code on the title screen.
+- Final screen shows passing, rushing, receiving and defensive leaders. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
 - Synthesized sound effects, crowd and an optional announcer voice. There are no art or audio asset files: every model, texture and sound is generated in code.
 - Graphics quality is picked automatically (HIGH: bloom, MSAA, 2K shadows, full crowd; LOW: lighter settings for phones and older machines) and can be changed in **Options**. Browsers without WebGL fall back to a 2D renderer.
 
