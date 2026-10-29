@@ -182,6 +182,7 @@
     this.drawBackground(g);
     this.drawField(g);
     this.drawMarkers(g);
+    this.drawToken(g);
     this.drawEntities(g, dt);
     this.updateParticles(dt, g);
     if (this.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + (this.flash * 0.35) + ')'; ctx.fillRect(0, 0, this.W, this.H); }
@@ -283,6 +284,17 @@
       self.line3(gx, MID - 3.08, 3.3, gx, MID - 3.08, 13, Y, 0.14, 1.5);
       self.line3(gx, MID + 3.08, 3.3, gx, MID + 3.08, 13, Y, 0.14, 1.5);
     });
+  };
+
+  R.drawToken = function (g) {
+    var t = g.token;
+    if (!t) return;
+    var sc = this.project(t.x, t.y, 1.2), ctx = this.ctx;
+    if (!sc) return;
+    var col = (FB.POWER_COLORS || {})[t.type] || '#fff', r = Math.max(5, sc.s * 0.4);
+    ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(sc.x, sc.y - r); ctx.lineTo(sc.x + r * 0.7, sc.y); ctx.lineTo(sc.x, sc.y + r); ctx.lineTo(sc.x - r * 0.7, sc.y); ctx.closePath(); ctx.fill();
+    ctx.restore();
   };
 
   R.drawMarkers = function (g) {
@@ -687,6 +699,38 @@
       else { grd2.addColorStop(0, ccol); grd2.addColorStop(1, '#ffffff'); }
       ctx.fillStyle = grd2; roundRect(ctx, mx, my, Math.max(0.01, mw * v), mh, 4); ctx.fill();
     });
+    // wind badge
+    if (g.wind && g.wind.mph > 0) {
+      var wx = W / 2 + bw / 2 + 12, wy = by + bh / 2;
+      if (wx + 96 > W) { wx = W - 104; wy = opts.top ? by + bh + 26 : by - 64; }
+      ctx.fillStyle = 'rgba(10,13,31,0.85)'; roundRect(ctx, wx, wy - 15, 92, 30, 8); ctx.fill();
+      var sr = Math.sin(g.wind.ang) * g.dir, su = Math.cos(g.wind.ang) * g.dir;
+      ctx.save(); ctx.translate(wx + 17, wy); ctx.rotate(Math.atan2(-su, sr));
+      ctx.fillStyle = '#9fd8ff'; ctx.beginPath(); ctx.moveTo(9, 0); ctx.lineTo(-6, -6); ctx.lineTo(-3, 0); ctx.lineTo(-6, 6); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#fff'; ctx.font = font('700', 12); ctx.textAlign = 'left';
+      ctx.fillText(g.wind.mph + ' MPH', wx + 32, wy + 1);
+    }
+    // kick meter (field goals, extra points, punts, kickoffs)
+    var ka = g.kickAnim, km = g.koMeter;
+    var meterOn = (g.phase === 'anim' && ka && ka.human && ka.stage === 'meter') || (km && !km.set && g.phase === 'presnap');
+    if (meterOn) {
+      var mw = Math.min(420, W - 40), mh = 22, mx = (W - mw) / 2, my = (opts.top ? by + bh + 60 : by - 96);
+      var pwr = km ? km.val : (ka.power != null ? ka.power : ka.meterVal || 0);
+      ctx.fillStyle = 'rgba(10,13,31,0.88)'; roundRect(ctx, mx - 10, my - 30, mw + 20, mh + 44, 10); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = font('700', 12); ctx.textAlign = 'left';
+      ctx.fillText(km ? 'KICKOFF POWER' : (ka.power == null ? 'POWER' : 'ACCURACY'), mx, my - 14);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(mx, my, mw, mh);
+      var pg = ctx.createLinearGradient(mx, 0, mx + mw, 0); pg.addColorStop(0, '#3dff8b'); pg.addColorStop(0.7, '#ffd23a'); pg.addColorStop(1, '#ff4d1f');
+      ctx.fillStyle = pg; ctx.fillRect(mx, my, mw * pwr, mh);
+      if (!km && ka.power != null) {
+        // accuracy: needle swings across; the center notch is dead straight
+        ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(mx + mw / 2 - 1, my - 4, 2, mh + 8);
+        var nx = mx + mw / 2 + (ka.needle || 0) * mw / 2;
+        ctx.fillStyle = '#2ee6ff'; ctx.beginPath(); ctx.moveTo(nx, my - 6); ctx.lineTo(nx - 7, my - 16); ctx.lineTo(nx + 7, my - 16); ctx.fill();
+        ctx.fillRect(nx - 1.5, my, 3, mh);
+      }
+    }
     if (opts.hint) {
       ctx.font = font('700', 13); ctx.textAlign = 'center';
       var hw = ctx.measureText(opts.hint).width + 30;
