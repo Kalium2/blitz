@@ -66,7 +66,8 @@
     }
     fy = clamp(fy, 15, FW - 15);
     var k = 1 - Math.exp(-dt * 4.5);
-    if (!cam.init || cam.dir !== g.dir) { cam.x = fx; cam.y = fy; cam.dir = g.dir; cam.H = H; cam.B = B; cam.init = true; }
+    var vd = g.viewDir || g.dir;
+    if (!cam.init || cam.dir !== vd) { cam.x = fx; cam.y = fy; cam.dir = vd; cam.H = H; cam.B = B; cam.init = true; }
     cam.x = lerp(cam.x, fx, k); cam.y = lerp(cam.y, fy, k);
     cam.H = lerp(cam.H, H, k * 0.6); cam.B = lerp(cam.B, B, k * 0.6);
     this.shake = Math.max(0, this.shake - dt * 3);
@@ -589,6 +590,7 @@
   };
 
   R.reset = function () { this.banners = []; this.particles = []; this.cam.init = false; };
+  R.heading = function () { return this.cam.init ? (this.cam.dir > 0 ? 0 : Math.PI) : null; };
 
   R.setWeather = function (w) { this.weather = w || 'clear'; };
 

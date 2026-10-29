@@ -697,34 +697,43 @@
       return;
     }
     cam.replayInit = false; cam.replaySide = 0;
+    var vd = g.viewDir || g.dir;
     if (g.phase === 'select' || g.phase === 'presnap' || g.phase === 'pat') {
       fx = g.losX + g.dir * 1; fy = MID + (b.y - MID) * 0.3; H = 8.6; Bk = 16;
       if (g.playType === 'kickoff') { fx = FB.Game.ownGoal(g.poss) + g.dir * 22; H = 10; Bk = 18; }
     } else if (g.phase === 'anim' && g.kickAnim) {
       fx = b.x; fy = b.y; H = 9; Bk = 15;
     } else {
-      fx = b.x + g.dir * 2; fy = b.y; H = 9.2; Bk = 15.5;
+      fx = b.x + vd * 2; fy = b.y; H = 9.2; Bk = 15.5;
       if (b.state === 'air' && b.kind === 'pass') { fx = lerp(b.x, b.tx, 0.45); fy = lerp(b.y, b.ty, 0.45); H = 11; Bk = 18; }
       if (g.playType === 'kickoff' && b.state === 'air') { fx = lerp(b.tx, b.x, 0.45); H = 10.5; Bk = 18; }
     }
     if (g.phase === 'final' || g.phase === 'break') { H = 6; Bk = 11; }
     fy = clamp(fy, 13, FW - 13);
     var k = 1 - Math.exp(-dt * 4);
-    if (!cam.init || cam.dir !== g.dir) { cam.x = fx; cam.y = fy; cam.dir = g.dir; cam.H = H; cam.B = Bk; cam.init = true; }
+    // heading: 0 looks toward x=100, PI toward x=0. Between plays it cuts; after a
+    // turnover during a live play it swings around the ball like a TV crane shot.
+    var hT = vd > 0 ? 0 : Math.PI;
+    var live = g.phase === 'live' || g.phase === 'dead';
+    if (!cam.init || (!live && cam.dir !== g.dir)) { cam.x = fx; cam.y = fy; cam.dir = g.dir; cam.h = hT; cam.H = H; cam.B = Bk; cam.init = true; }
+    cam.dir = g.dir;
+    cam.h = angLerp(cam.h, hT, 1 - Math.exp(-dt * 2.6));
+    if (Math.abs(((hT - cam.h + Math.PI) % TAU + TAU) % TAU - Math.PI) < 0.002) cam.h = hT;
     cam.x = lerp(cam.x, fx, k); cam.y = lerp(cam.y, fy, k);
     cam.H = lerp(cam.H, H, k * 0.5); cam.B = lerp(cam.B, Bk, k * 0.5);
     this.punch = Math.max(0, this.punch - dt * 2.5);
     var bz = 1 - this.punch * 0.25;
-    var px = cam.x - cam.dir * cam.B * bz, py = cam.H * bz, pz = cam.y;
+    var hc = Math.cos(cam.h), hs = Math.sin(cam.h);
+    var px = cam.x - hc * cam.B * bz, py = cam.H * bz, pz = cam.y - hs * cam.B * bz;
     var sh = this.shake;
     if (sh > 0) { px += rnd(-1, 1) * sh * 0.35; py += rnd(-1, 1) * sh * 0.25; pz += rnd(-1, 1) * sh * 0.35; }
     this.camera.position.set(px, py, pz);
-    this.camera.lookAt(cam.x + cam.dir * 3.5, 0.6, cam.y);
+    this.camera.lookAt(cam.x + hc * 3.5, 0.6, cam.y + hs * 3.5);
     this.shake = Math.max(0, this.shake - dt * 2.5);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     // shadow box follows the action
     this.key.position.set(cam.x + 25, 60, cam.y + 35);
-    this.key.target.position.set(cam.x + cam.dir * 6, 0, cam.y);
+    this.key.target.position.set(cam.x + hc * 6, 0, cam.y + hs * 6);
   };
 
   // ------------------------------------------------------------- poses
@@ -1002,6 +1011,7 @@
     this.wx.geometry.attributes.position.needsUpdate = true;
   };
 
+  R.heading = function () { return this.cam.init ? this.cam.h : null; };
   R.drawReplayBug = function (age, skipText) { this.hud.drawReplayBug(age, skipText); };
 
   R.project = function (x, y, z) {

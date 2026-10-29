@@ -293,6 +293,7 @@
         var h = 1 / 60, n = 0;
         var gameInputs = this.mode === 'game' && !UI.ps && !UI.isOpen('pat') ? inputs : [];
         if (menuOwnedInput && gameInputs.length) gameInputs = gameInputs.map(function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false }; });
+        if (this.renderer.heading && g.phase === 'live') g.camHeading = this.renderer.heading(); else g.camHeading = null;
         while (this.acc >= h && n < 6) {
           g.cpuStep(h);
           g.update(h, gameInputs);
@@ -473,6 +474,7 @@
             if (sfx) { Audio.play('fire'); }
             if (d.p) R.burst(d.p.x, d.p.y, 1.2, 24, [(FB.POWER_COLORS || {})[d.type] || '#fff', '#ffffff'], 5, 0.1);
             break;
+          case 'tipped': R.banner(d.batted ? 'BATTED DOWN!' : 'TIPPED!', { big: false, dur: 1.2, color: '#2ee6ff' }); if (sfx) Audio.play('catch'); break;
           case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
           case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.call('audible'); } break;
           case 'onsidecall': if (sfx) Audio.play('switch'); break;
