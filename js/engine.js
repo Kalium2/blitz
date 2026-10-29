@@ -57,6 +57,8 @@
     this.powers = {};                            // player id -> { type, plays }
     this.token = null;                           // power-up token on the field
     this.flip = 1;
+    this.viewDir = 1;        // which way the camera looks (follows turnovers mid-play)
+    this.camHeading = null;  // actual camera heading in radians, reported by the renderer
     this.score = [0, 0];
     this.quarter = 1;
     this.clock = this.qLen;
@@ -165,6 +167,7 @@
     this.token = null;
     this.hotChecked = false; this.hotRecv = null;
     this.kickRunT = 0; this.koMeter = null;
+    this.viewDir = this.dir;
     this.passThrown = false;
     this.handedOff = false;
     this.playT = 0;
@@ -677,10 +680,14 @@
   function lerpN(a, b, t) { return a + (b - a) * t; }
 
   // Convert screen-relative stick input to a world-space movement wish.
+  // Stick input is screen-relative: map it through the camera's heading so
+  // "up" is always away from the camera, even while it swings after a turnover.
   G.inputToWant = function (p, inp, turbo) {
     var ix = inp.x || 0, iy = inp.y || 0;
-    p.want.x = iy * this.dir;
-    p.want.y = ix * this.dir;
+    var h = this.camHeading != null ? this.camHeading : (this.viewDir > 0 ? 0 : Math.PI);
+    var c = Math.cos(h), s = Math.sin(h);
+    p.want.x = iy * c - ix * s;
+    p.want.y = iy * s + ix * c;
     p.wantTurbo = !!turbo;
   };
 
@@ -761,6 +768,7 @@
     if (this.phase !== 'live') return;
     this.checkTackles();
     if (this.phase !== 'live') return;
+    this.checkHumanHits();
     this.checkBounds();
     if (this.phase === 'live' && this.playT > 28) {
       var h = this.ball.holder;
@@ -842,7 +850,8 @@
     var ix = inp.x || 0, iy = inp.y || 0;
     var self = this;
     if (Math.abs(ix) + Math.abs(iy) > 0.3) {
-      var wx = iy * this.dir, wy = ix * this.dir, wl = len(wx, wy);
+      var tmp = { want: { x: 0, y: 0 } }; this.inputToWant(tmp, inp, false);
+      var wx = tmp.want.x, wy = tmp.want.y, wl = len(wx, wy) || 1;
       var best = null, bs = -1e9;
       recs.forEach(function (r) {
         var dx = r.x - qb.x, dy = r.y - qb.y, dl = len(dx, dy) || 1;
@@ -932,7 +941,7 @@
       else { turbo = false; p.stam = Math.min(1, p.stam + dt * 0.24); }
     }
     if (turbo) sp *= TURBO_MUL;
-    if (p.eng) sp *= 0.22;
+    if (p.eng) sp *= (p.ctl >= 0 ? 0.45 : 0.22);
     if (p.spinT > 0) { p.spinT -= dt; sp *= 0.92; }
     if (p.kickT > 0) p.kickT -= dt;
     if (p.stiffT > 0) p.stiffT -= dt;
@@ -990,7 +999,7 @@
       if (!p.eng || !p.blocking) return;
       var d = p.eng;
       var rate = 1;
-      if (d.ctl >= 0 && d.humanTurbo) rate = 2.1;
+      if (d.ctl >= 0) rate = d.humanTurbo ? 3.2 : 1.6;
       p.engT -= dt * rate;
       // blocker stays between defender and the ball
       var tgt = carrier || self.off && self.off.QB || b;
@@ -1008,7 +1017,9 @@
       for (var i = 0; i < ps.length; i++) {
         var d = ps[i];
         if (d.team === bl.team || d.eng || d.state !== 'ok') continue;
-        if (d.immune > 0 && d.immuneTo === bl) continue;
+        if (d.immune > 0 && (d.immuneTo === bl || d.ctl >= 0)) continue;
+        // the defender you control can't be picked up once he's at the ball carrier
+        if (d.ctl >= 0 && carrier && dist(d, carrier) < 2.4) continue;
         if (dist(bl, d) < 1.05) { self.engage(bl, d); break; }
       }
     });
@@ -1031,6 +1042,7 @@
     var t = base + (bl.r.str - (d.r.prs * 0.55 + d.r.str * 0.45)) / 22 + rnd(-0.45, 0.75);
     if (this.fire[d.team]) t *= 0.6;
     if (this.fire[bl.team]) t *= 1.25;
+    if (d.ctl >= 0) t *= 0.35; // the player you control fights off blocks quickly
     bl.eng = d; d.eng = bl; bl.engT = clamp(t, ol ? 0.35 : 0.2, ol ? 3.2 : 1.4); bl.blocking = true;
     // occasional pancake
     if (bl.r.str - d.r.str > 4 && Math.random() < 0.07) {
@@ -1045,7 +1057,7 @@
     if (bl.eng === d) bl.eng = null;
     if (d.eng === bl) d.eng = null;
     bl.blocking = false;
-    d.immune = 0.9; d.immuneTo = bl;
+    d.immune = d.ctl >= 0 ? 1.6 : 0.9; d.immuneTo = bl;
   };
 
   // ------------------------------------------------------------ ball
@@ -1056,7 +1068,11 @@
     var prevTeam = this.ballTeam;
     this.ballTeam = p.team;
     p.gotInEZ = (p.x - ownGoal(p.team)) * dirOf(p.team) < 0;
-    if (prevTeam !== p.team) this.emit('change', { team: p.team });
+    if (prevTeam !== p.team) {
+      if (this.phase === 'live' && this.playType !== 'kickoff') this.viewDir = dirOf(p.team);
+      if (this.playType === 'kickoff' && p.team !== this.poss) this.viewDir = dirOf(p.team);
+      this.emit('change', { team: p.team });
+    }
   };
 
   G.pitchTo = function (qb, rb) {
@@ -1215,15 +1231,22 @@
       if (hit || d.team === o || d.state !== 'ok' || d.eng || self.flightChecked.indexOf(d) >= 0) return;
       var jumped = (self.time - d.jumpAt) < 0.75;
       if (b.z > (jumped ? 3.3 : 2.6)) return; // standing / leaping reach
-      if (dist(d, b) > (jumped ? 1.1 : 0.85)) return;
+      if (dist(d, b) > (jumped ? 1.1 : 0.7)) return;
       self.flightChecked.push(d);
       var r = Math.random();
       var pInt = 0.18 + (d.r.cth - 60) / 200 + (jumped ? 0.12 : 0) + (self.fire[d.team] ? 0.06 : 0) + (self.powerOf(d) === 'hands' ? 0.1 : 0);
       if (r < pInt) hit = ['int', d];
-      else if (r < pInt + 0.35) hit = ['tip', d];
+      else if (r < pInt + 0.3) hit = ['tip', d];
     });
     if (!hit) return false;
-    if (hit[0] === 'int') this.intercept(hit[1]); else this.incomplete(hit[1]);
+    if (hit[0] === 'int') { this.intercept(hit[1]); return true; }
+    var d = hit[1];
+    if (d.jumpT <= 0) { d.jumpT = 0.55; d.jumpAt = this.time; }
+    var near = len(b.x - b.sx, b.y - b.sy) < 4;
+    this.emit('tipped', { p: d, batted: near });
+    this.incomplete(d, true);
+    // the ball pops off his hands instead of just dropping
+    b.vx = rnd(-3, 3); b.vy = rnd(-3, 3); b.vz = rnd(3, 5);
     return true;
   };
 
@@ -1324,8 +1347,9 @@
       var d = this.players[i];
       if (d.team === c.team || d.tackleCD > 0) continue;
       if (d.state !== 'ok' && d.state !== 'dive') continue;
-      if (d.eng) continue;
-      var reach = d.state === 'dive' ? 1.35 : 0.95;
+      // reach matches the 3D models (shoulder pads touch at ~1 yard); a defender
+      // tied up with a blocker can still reach out and grab a runner going by
+      var reach = d.state === 'dive' ? 1.4 : d.eng ? 0.95 : 1.1;
       if (dist(d, c) > reach) continue;
       // Contact brings the carrier down. Only a timed move beats it:
       //   spin    -> slips arm tackles (not dives)
@@ -1340,6 +1364,7 @@
       else if (c.stiffT > 0 && inFront) p = d.state === 'dive' ? 0.45 : 0.18;
       if (this.fire[c.team]) p -= 0.08;
       if (this.fire[d.team]) p += 0.05;
+      if (d.eng) p -= 0.15;
       if (this.powerOf(c) === 'tank') p -= 0.3;
       if (this.powerOf(d) === 'tank') p += 0.2;
       p = clamp(p, 0.05, 0.99);
@@ -1349,6 +1374,26 @@
       c.stumble = 0.28;
       this.emit('broken', { p: c });
     }
+  };
+
+  // Blitz-style: no flags, so the defender you control can level any
+  // offensive player he runs into with turbo (receivers before the catch too).
+  G.checkHumanHits = function () {
+    var self = this, b = this.ball;
+    this.ctl.forEach(function (c) {
+      var d = c.pl;
+      if (!d || d.state !== 'ok' && d.state !== 'dive' || !(d.humanTurbo || d.state === 'dive') || d.tackleCD > 0) return;
+      if (b.state === 'held' && b.holder && b.holder.team === d.team) return; // only while defending
+      self.players.forEach(function (o) {
+        if (o.team === d.team || o.state !== 'ok' || o === b.holder || o.eng === d) return;
+        if (dist(o, d) > 1.05) return;
+        o.state = 'down'; o.st = 1.0;
+        var dx = o.x - d.x, dy = o.y - d.y, dl = len(dx, dy) || 1;
+        o.vx = dx / dl * 5; o.vy = dy / dl * 5;
+        d.tackleCD = 0.4;
+        self.emit('hit', { big: true, p: o });
+      });
+    });
   };
 
   G.tackle = function (c, d) {
@@ -1531,7 +1576,7 @@
     p.want.x = fx / l; p.want.y = fy / l;
     if ((fx * dir) < 0.15) p.want.x = dir * 0.3;
     p.wantTurbo = nearest < 7 || this.fire[t];
-    if (nearest < 1.8 && p.spinCD <= 0 && p.jumpT <= 0 && Math.random() < 0.09) { var mv = Math.random(); if (mv < 0.4) this.startStiff(p); else if (mv < 0.85) this.startSpin(p); else this.startJump(p); }
+    if (nearest < 1.8 && p.spinCD <= 0 && p.jumpT <= 0 && Math.random() < 0.03) { var mv = Math.random(); if (mv < 0.4) this.startStiff(p); else if (mv < 0.85) this.startSpin(p); else this.startJump(p); }
     if (nearest < 1.3 && Math.random() < 0.006 && this.lateral(p)) return;
     if (nearest < 2.2 && p.jumpT <= 0 && Math.random() < 0.012) this.startJump(p);
   };
