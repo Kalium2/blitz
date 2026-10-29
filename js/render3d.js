@@ -106,53 +106,109 @@
   // ============================================================ materials
   var SKIN = ['#5b3a29', '#8d5a3b', '#c48a5c', '#e8b48f', '#3e2a20', '#a8714a'];
 
-  function Mats() { this.cache = {}; this.skin = SKIN.map(function (c) { return new T.MeshStandardMaterial({ color: c, roughness: 0.6 }); });
-    this.shoe = new T.MeshStandardMaterial({ color: '#111216', roughness: 0.45 });
-    this.mask = new T.MeshStandardMaterial({ color: '#c8ccd6', roughness: 0.3, metalness: 0.7 });
+  // Tiny procedural knit pattern used as a bump map so jerseys read as mesh fabric.
+  var KNIT = null;
+  function knitTexture() {
+    if (KNIT) return KNIT;
+    var c = document.createElement('canvas'); c.width = c.height = 64;
+    var x = c.getContext('2d');
+    x.fillStyle = '#808080'; x.fillRect(0, 0, 64, 64);
+    for (var i = 0; i < 64; i += 4) for (var j = 0; j < 64; j += 4) { x.fillStyle = ((i + j) / 4) % 2 ? '#9a9a9a' : '#5c5c5c'; x.beginPath(); x.arc(i + 2, j + 2, 1.3, 0, TAU); x.fill(); }
+    KNIT = new T.CanvasTexture(c);
+    KNIT.wrapS = KNIT.wrapT = T.RepeatWrapping; KNIT.repeat.set(6, 6);
+    return KNIT;
+  }
+
+  function Mats() {
+    this.cache = {};
+    this.skin = SKIN.map(function (c) { return new T.MeshPhysicalMaterial({ color: c, roughness: 0.55, sheen: 0.25, sheenColor: new T.Color('#ffd9c2') }); });
+    this.shoe = new T.MeshPhysicalMaterial({ color: '#111216', roughness: 0.35, clearcoat: 0.6 });
+    this.sole = new T.MeshStandardMaterial({ color: '#f2f2f2', roughness: 0.6 });
+    this.mask = new T.MeshStandardMaterial({ color: '#c8ccd6', roughness: 0.28, metalness: 0.75 });
+    this.tape = new T.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.8 });
+    this.visor = new T.MeshPhysicalMaterial({ color: '#0b0d14', roughness: 0.05, metalness: 0.6, transparent: true, opacity: 0.85 });
+    this.eye = new T.MeshStandardMaterial({ color: '#111', roughness: 0.3 });
     this.ball = new T.MeshStandardMaterial({ color: '#7a3c16', roughness: 0.55 });
     this.lace = new T.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
   }
   Mats.prototype.team = function (t) {
     if (this.cache[t.abbr]) return this.cache[t.abbr];
+    var knit = knitTexture();
     var m = {
-      jersey: new T.MeshStandardMaterial({ color: t.c.jersey, roughness: 0.62 }),
-      trim: new T.MeshStandardMaterial({ color: t.c.trim, roughness: 0.55 }),
-      pants: new T.MeshStandardMaterial({ color: t.c.pants, roughness: 0.5 }),
-      helmet: new T.MeshPhysicalMaterial({ color: t.c.helmet, roughness: 0.22, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.08 }),
-      stripe: new T.MeshStandardMaterial({ color: t.c.stripe, roughness: 0.35 }),
-      sock: new T.MeshStandardMaterial({ color: t.c.jersey === '#F4F4F4' ? t.c.trim : t.c.jersey, roughness: 0.7 }),
-      glove: new T.MeshStandardMaterial({ color: t.c.trim, roughness: 0.6 })
+      jersey: new T.MeshPhysicalMaterial({ color: t.c.jersey, roughness: 0.68, sheen: 0.6, sheenRoughness: 0.5, sheenColor: new T.Color('#ffffff'), bumpMap: knit, bumpScale: 0.2 }),
+      trim: new T.MeshPhysicalMaterial({ color: t.c.trim, roughness: 0.6, sheen: 0.4 }),
+      pants: new T.MeshPhysicalMaterial({ color: t.c.pants, roughness: 0.42, sheen: 0.8, sheenRoughness: 0.35, sheenColor: new T.Color('#ffffff') }),
+      helmet: new T.MeshPhysicalMaterial({ color: t.c.helmet, roughness: 0.2, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.05 }),
+      stripe: new T.MeshPhysicalMaterial({ color: t.c.stripe, roughness: 0.25, clearcoat: 1 }),
+      sock: new T.MeshStandardMaterial({ color: t.c.jersey === '#F4F4F4' ? t.c.trim : t.c.jersey, roughness: 0.75 }),
+      glove: new T.MeshPhysicalMaterial({ color: t.c.trim, roughness: 0.45, sheen: 0.3 })
     };
     this.cache[t.abbr] = m;
     return m;
   };
 
   // ========================================================= player model
+  // Revolve a profile of [radius, y] points around the vertical axis.
+  function lathe(pts, seg, sx, sz) {
+    var g = new T.LatheGeometry(pts.map(function (p) { return new T.Vector2(Math.max(0.0005, p[0]), p[1]); }), seg || 20);
+    if (sx || sz) g.scale(sx || 1, 1, sz || 1);
+    g.computeVertexNormals();
+    return g;
+  }
+  function tube(points, r, seg) { return new T.TubeGeometry(new T.CatmullRomCurve3(points.map(function (p) { return new T.Vector3(p[0], p[1], p[2]); })), seg || 20, r, 6, false); }
+
   var GEO = null;
   function geos() {
     if (GEO) return GEO;
     var RB = T.RoundedBoxGeometry;
+    var HR = 0.155; // helmet radius
+    var arcBar = function (y, rad, half) {
+      var pts = [];
+      for (var i = 0; i <= 8; i++) { var a = -half + (2 * half) * i / 8; pts.push([Math.sin(a) * rad, y, Math.cos(a) * rad]); }
+      return tube(pts, 0.0105, 24);
+    };
+    var stripePts = [];
+    for (var k = 0; k <= 10; k++) { var ph = 0.35 + k / 10 * 2.3; stripePts.push([0, Math.sin(ph) * HR * 1.075, Math.cos(ph) * HR * 1.19]); }
     GEO = {
-      pelvis: new RB(0.42, 0.24, 0.28, 2, 0.06),
-      thigh: new T.CapsuleGeometry(0.095, 0.28, 4, 10),
-      shin: new T.CapsuleGeometry(0.072, 0.3, 4, 10),
-      shoe: new RB(0.13, 0.09, 0.27, 2, 0.035),
-      torso: new RB(0.48, 0.5, 0.3, 3, 0.09),
-      pad: new T.SphereGeometry(0.165, 16, 10),
-      neck: new T.CylinderGeometry(0.06, 0.07, 0.12, 10),
-      helmet: new T.SphereGeometry(0.16, 22, 16),
-      stripe: new T.BoxGeometry(0.045, 0.02, 0.3),
-      face: new T.SphereGeometry(0.1, 14, 10),
-      bar: new T.CylinderGeometry(0.012, 0.012, 0.22, 6),
-      vbar: new T.CylinderGeometry(0.012, 0.012, 0.12, 6),
-      sleeve: new T.CapsuleGeometry(0.075, 0.12, 4, 10),
-      band: new T.CylinderGeometry(0.079, 0.079, 0.035, 12),
-      arm: new T.CapsuleGeometry(0.058, 0.12, 4, 8),
-      fore: new T.CapsuleGeometry(0.052, 0.18, 4, 8),
-      hand: new T.SphereGeometry(0.058, 10, 8),
+      // lower body
+      pelvis: lathe([[0, -0.13], [0.11, -0.12], [0.16, -0.03], [0.168, 0.07], [0.15, 0.13], [0, 0.135]], 22, 1.28, 0.86),
+      belt: lathe([[0.152, 0.085], [0.156, 0.1], [0.152, 0.118]], 22, 1.28, 0.86),
+      thigh: lathe([[0, 0.03], [0.098, 0.01], [0.113, -0.09], [0.106, -0.24], [0.088, -0.38], [0.075, -0.46], [0, -0.48]], 18),
+      kneepad: new T.SphereGeometry(0.068, 14, 10),
+      shin: lathe([[0, 0.02], [0.068, 0.0], [0.079, -0.1], [0.067, -0.22], [0.051, -0.35], [0.047, -0.42], [0, -0.43]], 16),
+      cleat: new RB(0.115, 0.075, 0.27, 2, 0.03),
+      sole: new RB(0.12, 0.022, 0.28, 1, 0.008),
+      // torso: V-shaped chest under shoulder pads
+      torso: lathe([[0, -0.03], [0.148, -0.03], [0.158, 0.09], [0.19, 0.25], [0.207, 0.36], [0.195, 0.46], [0.12, 0.55], [0, 0.56]], 26, 1.26, 0.78),
+      pads: new T.SphereGeometry(0.28, 30, 18),
+      joint: new T.SphereGeometry(1, 14, 10),
+      epaulet: new T.SphereGeometry(0.13, 20, 12),
+      collar: new T.TorusGeometry(0.075, 0.02, 8, 24),
+      neck: lathe([[0.062, 0], [0.066, 0.06], [0.06, 0.12]], 14),
+      // arms
+      sleeve: lathe([[0, 0.05], [0.09, 0.03], [0.096, -0.05], [0.088, -0.13], [0.084, -0.15], [0, -0.155]], 16),
+      band: lathe([[0.087, -0.11], [0.09, -0.125], [0.087, -0.14]], 16),
+      bicep: lathe([[0.072, -0.1], [0.074, -0.17], [0.062, -0.27], [0.053, -0.325], [0.04, -0.345], [0, -0.35]], 14),
+      fore: lathe([[0, 0.035], [0.04, 0.028], [0.052, 0.005], [0.061, -0.06], [0.046, -0.2], [0.039, -0.25], [0, -0.26]], 14),
+      wrist: lathe([[0.042, -0.2], [0.044, -0.225], [0.042, -0.25]], 12),
+      palm: new RB(0.072, 0.095, 0.042, 2, 0.018),
+      thumb: new T.CapsuleGeometry(0.016, 0.04, 3, 6),
+      // head and helmet
+      crown: new T.SphereGeometry(HR, 34, 18, 0, TAU, 0, Math.PI * 0.47),
+      shellBack: new T.SphereGeometry(HR, 34, 10, Math.PI / 2 + 0.95, TAU - 1.9, Math.PI * 0.47, Math.PI * 0.27),
+      jaw: new T.SphereGeometry(0.07, 14, 10),
+      stripe: tube(stripePts, 0.017, 30),
+      face: new T.SphereGeometry(0.094, 18, 14),
+      eye: new T.SphereGeometry(0.011, 8, 6),
+      bar1: arcBar(-0.02, HR * 1.12, 1.05),
+      bar2: arcBar(-0.075, HR * 1.06, 0.95),
+      vbar: tube([[0, 0.02, HR * 1.13], [0, -0.05, HR * 1.12], [0, -0.115, HR * 0.95]], 0.0105, 12),
+      sidebar: tube([[0, 0.0, 0], [0, -0.06, 0.02], [0, -0.1, 0.0]], 0.0105, 8),
+      chin: new RB(0.07, 0.04, 0.04, 2, 0.015),
+      visor: new T.SphereGeometry(HR * 1.02, 24, 6, Math.PI / 2 - 0.75, 1.5, Math.PI * 0.43, Math.PI * 0.14),
+      // football
       ball: new T.SphereGeometry(0.11, 18, 12),
-      lace: new T.BoxGeometry(0.11, 0.012, 0.022),
-      chestStripe: new RB(0.49, 0.05, 0.305, 1, 0.02)
+      lace: new T.BoxGeometry(0.11, 0.012, 0.022)
     };
     return GEO;
   }
@@ -175,37 +231,55 @@
     this.parts = { jersey: [], trim: [], pants: [], helmet: [], stripe: [], sock: [], glove: [], skin: [] };
     var P = this.parts, self = this;
     var add = function (kind, geo, parent, x, y, z) { var m = mesh(geo, mats.shoe, parent, x, y, z); if (kind) P[kind].push(m); return m; };
+    // --- lower body
     add('pants', G.pelvis, this.hips, 0, 0, 0);
+    add('trim', G.belt, this.hips, 0, 0, 0);
     this.legs = [-1, 1].map(function (s) {
-      var thigh = grp(self.hips, 0.12 * s, -0.04, 0);
-      add('pants', G.thigh, thigh, 0, -0.2, 0);
+      var thigh = grp(self.hips, 0.105 * s, -0.05, 0);
+      add('pants', G.thigh, thigh, 0, 0, 0);
+      var pad = add('pants', G.kneepad, thigh, 0, -0.43, 0.055); pad.scale.set(1, 1.15, 0.62);
       var knee = grp(thigh, 0, -0.46, 0);
-      add('sock', G.shin, knee, 0, -0.2, 0);
+      add('pants', G.joint, knee, 0, 0, 0).scale.set(0.07, 0.07, 0.07);
+      add('sock', G.shin, knee, 0, 0, 0);
       var foot = grp(knee, 0, -0.42, 0);
-      mesh(G.shoe, mats.shoe, foot, 0, 0, 0.05);
+      mesh(G.cleat, mats.shoe, foot, 0, 0.0, 0.055);
+      mesh(G.sole, mats.sole, foot, 0, -0.04, 0.055);
       return { thigh: thigh, knee: knee, foot: foot };
     });
-    this.spine = grp(this.hips, 0, 0.08, 0);
-    add('jersey', G.torso, this.spine, 0, 0.3, 0);
-    add('trim', G.chestStripe, this.spine, 0, 0.36, 0);
-    var padL = add('jersey', G.pad, this.spine, -0.2, 0.52, 0); padL.scale.set(1, 0.72, 1.12);
-    var padR = add('jersey', G.pad, this.spine, 0.2, 0.52, 0); padR.scale.set(1, 0.72, 1.12);
-    add('skin', G.neck, this.spine, 0, 0.62, 0);
+    // --- torso and pads
+    this.spine = grp(this.hips, 0, 0.1, 0);
+    add('jersey', G.torso, this.spine, 0, 0, 0);
+    var pads = add('jersey', G.pads, this.spine, 0, 0.405, 0); pads.scale.set(1.3, 0.42, 0.95);
+    [-1, 1].forEach(function (s) { var e = add('jersey', G.epaulet, self.spine, 0.255 * s, 0.45, 0); e.scale.set(1.0, 0.72, 1.08); });
+    var col = add('trim', G.collar, this.spine, 0, 0.55, 0.0); col.rotation.x = Math.PI / 2; col.scale.set(1.1, 0.9, 1);
+    add('skin', G.neck, this.spine, 0, 0.53, 0);
+    // --- head: helmet shell, ear/jaw guards, stripe, cage facemask
     this.head = grp(this.spine, 0, 0.75, 0);
-    var hel = add('helmet', G.helmet, this.head, 0, 0, -0.01); hel.scale.set(1, 1.02, 1.12);
-    add('stripe', G.stripe, this.head, 0, 0.158, -0.01);
-    add('skin', G.face, this.head, 0, -0.03, 0.075);
-    [-0.025, -0.075].forEach(function (y) { var b = mesh(G.bar, mats.mask, self.head, 0, y, 0.165); b.rotation.z = Math.PI / 2; });
-    mesh(G.vbar, mats.mask, this.head, 0, -0.05, 0.172);
+    var crown = add('helmet', G.crown, this.head, 0, -0.005, -0.012); crown.scale.set(1, 1.07, 1.17);
+    var back = add('helmet', G.shellBack, this.head, 0, -0.005, -0.012); back.scale.set(1, 1.07, 1.17);
+    [-1, 1].forEach(function (s) { var j = add('helmet', G.jaw, self.head, 0.118 * s, -0.075, 0.035); j.scale.set(0.42, 0.95, 1.25); });
+    add('stripe', G.stripe, this.head, 0, -0.005, -0.012);
+    add('skin', G.face, this.head, 0, -0.035, 0.05).scale.set(0.95, 1.08, 1);
+    [-1, 1].forEach(function (s) { mesh(G.eye, mats.eye, self.head, 0.032 * s, -0.012, 0.137); });
+    mesh(G.bar1, mats.mask, this.head, 0, 0, 0);
+    mesh(G.bar2, mats.mask, this.head, 0, 0, 0);
+    mesh(G.vbar, mats.mask, this.head, 0, 0, 0);
+    [-1, 1].forEach(function (s) { mesh(G.sidebar, mats.mask, self.head, 0.135 * s, -0.01, 0.075); });
+    mesh(G.chin, mats.tape, this.head, 0, -0.135, 0.105);
+    this.visor = mesh(G.visor, mats.visor, this.head, 0, -0.005, -0.012); this.visor.scale.set(1, 1.07, 1.17);
+    // --- arms
     this.arms = [-1, 1].map(function (s) {
-      var sh = grp(self.spine, 0.3 * s, 0.47, 0);
-      add('jersey', G.sleeve, sh, 0, -0.08, 0);
-      add('trim', G.band, sh, 0, -0.17, 0);
-      add('skin', G.arm, sh, 0, -0.24, 0);
+      var sh = grp(self.spine, 0.285 * s, 0.44, 0);
+      add('jersey', G.sleeve, sh, 0, 0, 0);
+      add('trim', G.band, sh, 0, 0, 0);
+      add('skin', G.bicep, sh, 0, 0, 0);
       var el = grp(sh, 0, -0.32, 0);
-      add('skin', G.fore, el, 0, -0.12, 0);
-      var hand = grp(el, 0, -0.28, 0);
-      add('glove', G.hand, hand, 0, 0, 0);
+      add('skin', G.joint, el, 0, 0, 0).scale.set(0.044, 0.044, 0.044);
+      add('skin', G.fore, el, 0, 0, 0);
+      mesh(G.wrist, mats.tape, el, 0, 0, 0);
+      var hand = grp(el, 0, -0.29, 0);
+      add('glove', G.palm, hand, 0, -0.02, 0.005);
+      var th = add('glove', G.thumb, hand, -0.035 * s, 0.0, 0.02); th.rotation.z = 0.5 * s;
       return { sh: sh, el: el, hand: hand };
     });
     this.pose = { crouch: 0, lean: 0, amp: 0, bodyPitch: 0, bodyY: 0, yaw: 0, spin: 0,
@@ -219,6 +293,7 @@
     ['jersey', 'trim', 'pants', 'helmet', 'stripe', 'sock', 'glove'].forEach(function (k) { P[k].forEach(function (x) { x.material = m[k]; }); });
     P.skin.forEach(function (x) { x.material = sk; });
     this.root.scale.set(big ? 1.16 : 1, heightK, big ? 1.12 : 1);
+    this.visor.visible = (skinIdx * 7 + Math.round(heightK * 100)) % 3 === 0;
     this.teamAbbr = team.abbr;
   };
 
@@ -232,8 +307,9 @@
     L[0].knee.rotation.x = p.kL; L[1].knee.rotation.x = p.kR;
     L[0].foot.rotation.x = -(p.tL + p.kL) * 0.8; L[1].foot.rotation.x = -(p.tR + p.kR) * 0.8;
     // hips height from the planted (longest) leg so the feet stay on the turf
-    var hl = function (t, kk) { return 0.46 * Math.cos(t) + 0.46 * Math.cos(t + kk); };
-    var hh = Math.max(hl(p.tL, p.kL), hl(p.tR, p.kR)) + 0.085;
+    // thigh 0.46 + shin 0.42 + cleat/sole 0.051 (keeps the planted foot on the turf)
+    var hl = function (t, kk) { return 0.46 * Math.cos(t) + 0.42 * Math.cos(t + kk); };
+    var hh = Math.max(hl(p.tL, p.kL), hl(p.tR, p.kR)) + 0.051 + 0.05;
     this.hips.position.y = hh;
     this.spine.rotation.x = p.lean;
     this.head.rotation.x = -p.lean * 0.6;
@@ -965,7 +1041,7 @@
       tp.lean = 0.04 + Math.sin(t * 1.6) * 0.02;
       tp.tL = -0.08; tp.tR = 0.12; tp.kL = 0.15; tp.kR = 0.1;
       // arms folded / helmet-tucked hero pose
-      tp.aL = { p: -0.35, r: -0.45, e: -1.7 }; tp.aR = { p: -0.45, r: -0.5, e: -1.6 };
+      tp.aL = { p: 0.06 + Math.sin(t * 1.6) * 0.03, r: 0.24, e: -0.38 }; tp.aR = { p: 0.02, r: 0.22, e: -0.32 };
       m.apply(tp, dt, false);
       m.head.rotation.y = Math.sin(t * 0.7) * 0.25;
       var hs = FB.cheats && FB.cheats.bigHeads ? 1.9 : 1;

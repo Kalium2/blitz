@@ -5,7 +5,7 @@
  * lines, end zones run to -10 and 110. y runs across the field from 0 to
  * 53.33. Team 0 always attacks x = 100, team 1 always attacks x = 0.
  *
- * Arcade rules (NFL Blitz style): 7 on 7, 30 yards for a first down, no
+ * Arcade rules (NFL Blitz style): 7 on 7, 10 yards for a first down, no
  * penalties, late hits allowed, 3 straight completions or defensive stops
  * put a team ON FIRE.
  */
@@ -15,7 +15,7 @@
 
   var FW = 53.333, MID = FW / 2;
   var TURBO_MUL = 1.27;
-  var FIRST_DOWN = 30;
+  var FIRST_DOWN = 10;
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function rnd(a, b) { return a + Math.random() * (b - a); }

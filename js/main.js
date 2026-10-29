@@ -16,7 +16,7 @@
     paused: false,
     twoPlayer: false,
     lastTeams: null,
-    opts: { qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
+    opts: { music: true, qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
     rec: { frames: [], players: null },
     replay: null,
     replayPending: false,
@@ -63,7 +63,7 @@
         Input.initTouch(document.getElementById('touch'));
       }
       // unlock audio on first interaction
-      var unlock = function () { Audio.init(); };
+      var unlock = function () { Audio.init(); if (self.mode !== 'game') Audio.startMusic(); };
       window.addEventListener('keydown', unlock, { once: true });
       window.addEventListener('pointerdown', unlock, { once: true });
       window.addEventListener('gamepadconnected', unlock);
@@ -89,10 +89,12 @@
           if (['clear', 'rain', 'snow', 'fog', 'random'].indexOf(o.weather) >= 0) this.opts.weather = o.weather;
           this.opts.replays = o.replays !== false;
           this.opts.unlocked = !!o.unlocked;
+          this.opts.music = o.music !== false;
         }
       } catch (e) { /* storage unavailable */ }
       Audio.enabled = this.opts.sound;
       Audio.announcer = this.opts.announcer;
+      Audio.musicOn = this.opts.music;
     },
     saveOpts: function () {
       try { localStorage.setItem(OPTS_KEY, JSON.stringify(this.opts)); } catch (e) { /* ignore */ }
@@ -103,6 +105,7 @@
       UI.setLabel('options', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('pause', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('options', 'announcer', 'ANNOUNCER VOICE: ' + (this.opts.announcer ? 'ON' : 'OFF'));
+      UI.setLabel('options', 'music', 'MENU MUSIC: ' + (this.opts.music ? 'ON' : 'OFF'));
       UI.setLabel('extras', 'bigheads', 'BIG HEADS: ' + (this.opts.bigHeads ? 'ON' : 'OFF'));
       UI.setLabel('extras', 'infturbo', 'INFINITE TURBO: ' + (this.opts.infTurbo ? 'ON' : 'OFF'));
       UI.setLabel('extras', 'weather', 'WEATHER: ' + this.opts.weather.toUpperCase());
@@ -141,6 +144,7 @@
         else if (action === 'diff') o.diff = (o.diff + 1) % 3;
         else if (action === 'sound') { o.sound = !o.sound; Audio.setEnabled(o.sound); }
         else if (action === 'announcer') { o.announcer = !o.announcer; Audio.announcer = o.announcer; }
+        else if (action === 'music') { o.music = !o.music; Audio.setMusic(o.music); if (o.music && this.mode !== 'game') Audio.startMusic(); }
         else if (action === 'gfx') {
           o.gfx = { auto: 'high', high: 'low', low: 'auto' }[o.gfx];
           this.saveOpts();
@@ -179,6 +183,7 @@
 
     toTitle: function () {
       this.mode = 'title';
+      Audio.startMusic();
       Input.setMode(false);
       UI.show('title');
       this.startDemo();
@@ -212,7 +217,9 @@
       this.slow = { scale: 1, t: 0 }; this.hitstop = 0;
       document.getElementById('touch').classList.add('show');
       Audio.init();
+      Audio.stopMusic();
       Audio.roar(0.6, 3);
+      Audio.call('kickoff', true);
       var recv = this.game.teams[this.game.receiveFirst];
       this.renderer.banner('KICKOFF', { sub: recv.name.toUpperCase() + ' RECEIVE', dur: 2.2 });
     },
@@ -290,6 +297,14 @@
         if (n === 6) this.acc = 0;
         this.handleEvents(g);
         if (this.mode === 'game') {
+          var self3 = this;
+          this.prevTurbo = this.prevTurbo || [false, false];
+          inputs.forEach(function (inp, i) {
+            if (inp && inp.turbo && !self3.prevTurbo[i] && g.phase === 'live' && (Math.abs(inp.x) + Math.abs(inp.y) > 0.2)) Audio.play('turbo');
+            self3.prevTurbo[i] = !!(inp && inp.turbo);
+          });
+          this.crackleT = (this.crackleT || 0) - dt;
+          if ((g.fire[0] || g.fire[1]) && g.phase === 'live' && this.crackleT <= 0) { Audio.play('crackle'); this.crackleT = 0.35; }
           this.record(g);
           if (this.replayPending && g.phase === 'dead' && g.deadT < 0.5) this.startReplay(g);
           this.manageGame(g);
@@ -444,19 +459,19 @@
             if (sfx) Audio.play('whistle');
             if (!demo && g.result && g.result.data && g.result.data.x != null && g.playType !== 'kickoff' && g.result.ballTeam === g.poss && (g.result.data.x - g.losX) * g.dir >= 25) self.replayPending = true;
             break;
-          case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.say('Audible!'); } break;
+          case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.call('audible'); } break;
           case 'onsidecall': if (sfx) Audio.play('switch'); break;
-          case 'onside': R.banner('ONSIDE KICK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) Audio.say('Onside kick!'); break;
+          case 'onside': R.banner('ONSIDE KICK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) Audio.call('onside'); break;
           case 'onsidegood':
             R.banner('RECOVERED!', { sub: team ? team.name.toUpperCase() + ' BALL' : '', dur: 2 });
             if (R.cheer) R.cheer(0.9);
-            if (!demo) { self.replayPending = true; if (sfx) Audio.say('They recovered it!'); }
+            if (!demo) { self.replayPending = true; if (sfx) Audio.say('They recovered it!', true); }
             break;
           case 'onsidefail': R.banner('RECEIVING TEAM RECOVERS', { big: false, dur: 1.5 }); break;
-          case 'lateral': R.banner('LATERAL!', { big: false, dur: 1.0 }); if (sfx) Audio.play('throw'); break;
-          case 'stiff': if (sfx) Audio.play('hit'); if (!demo && Math.random() < 0.35) R.banner('STIFF ARM!', { big: false, dur: 0.9 }); break;
-          case 'snap': if (sfx) Audio.play('snap'); break;
-          case 'throw': if (sfx) Audio.play('throw'); if (R.notify) R.notify('throw', d); break;
+          case 'lateral': R.banner('LATERAL!', { big: false, dur: 1.0 }); if (sfx) { Audio.play('throw'); Audio.call('lateral'); } break;
+          case 'stiff': if (sfx) { Audio.play('hit'); if (Math.random() < 0.4) Audio.call('stiff'); } if (!demo && Math.random() < 0.35) R.banner('STIFF ARM!', { big: false, dur: 0.9 }); break;
+          case 'snap': if (sfx) { Audio.play('snap'); if (Math.random() < 0.5) Audio.call('hut'); } break;
+          case 'throw': if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw'); if (R.notify) R.notify('throw', d); break;
           case 'kick': if (sfx) Audio.play('kick'); break;
           case 'catch':
             if (sfx) { Audio.play('catch'); Audio.roar(0.25, 1.4); }
@@ -470,49 +485,49 @@
               R.shake = Math.max(R.shake, demo ? 0.3 : 0.8);
               if (!demo) { R.flash = 0.25; R.punch = 1; self.hitstop = 0.07; self.slowmo(0.45, 0.35); Input.rumble(1, 0.6, 220); }
             } else if (!demo) Input.rumble(0.4, 0.3, 90);
-            if (sfx) Audio.play(d.big ? 'bighit' : 'hit');
+            if (sfx) { Audio.play(d.big ? 'bighit' : 'hit'); if (d.big && Math.random() < 0.45) Audio.call('bighit'); }
             break;
           case 'pancake': if (!demo && Math.random() < 0.5) R.banner('PANCAKE!', { big: false, dur: 1.1 }); break;
           case 'broken': if (d.p) R.burst(d.p.x, d.p.y, 0.3, 6, ['#6bd16b', '#3a8a3a'], 3, 0.08); break;
           case 'latehit':
             R.banner('LATE HIT!', { big: false, dur: 1.2, color: '#ff4d1f' });
             if (d.p) R.burst(d.p.x, d.p.y, 1.2, 14, ['#fff', '#ff4d1f'], 5, 0.1);
-            R.shake = 0.6; if (sfx) Audio.play('bighit');
+            R.shake = 0.6; if (sfx) { Audio.play('bighit'); Audio.call('late'); }
             break;
           case 'td':
             R.banner('TOUCHDOWN!', { sub: team ? team.city.toUpperCase() + ' ' + team.name.toUpperCase() : '', dur: 2.6 });
             if (d.p) for (var i = 0; i < 4; i++) R.burst(d.p.x, d.p.y, 2, 24, [team.c.jersey, team.c.trim, '#ffffff', '#ffd23a'], 8, 0.14);
-            if (sfx) { Audio.play('td'); Audio.roar(1, 4); Audio.say('Touchdown!'); }
+            if (sfx) { Audio.play('td'); Audio.play('horn'); Audio.roar(1, 4); Audio.call('td', true); }
             if (R.confetti && d.p) R.confetti(d.p.x, d.p.y, [team.c.jersey, team.c.trim, '#ffffff', '#ffd23a']);
             if (R.cheer) R.cheer(1);
             if (!demo) { self.slowmo(0.35, 1.0); Input.rumble(0.8, 0.8, 400); self.replayPending = true; }
             break;
-          case 'first': R.banner('FIRST DOWN', { big: false, dur: 1.4 }); if (sfx) Audio.say('First down'); break;
+          case 'first': R.banner('FIRST DOWN', { big: false, dur: 1.4 }); if (sfx) Audio.call('first'); break;
           case 'int':
             R.banner('INTERCEPTED!', { dur: 1.8, color: '#2ee6ff' });
             if (R.cheer) R.cheer(0.8);
             if (!demo) { self.slowmo(0.4, 0.6); R.punch = 1; self.replayPending = true; }
-            if (sfx) { Audio.roar(0.8, 2.5); Audio.say('Intercepted!'); }
+            if (sfx) { Audio.roar(0.8, 2.5); Audio.call('int', true); }
             break;
-          case 'fumble': R.banner('FUMBLE!', { dur: 1.6, color: '#ff4d1f' }); if (sfx) { Audio.roar(0.7, 2); Audio.say('Fumble!'); } break;
+          case 'fumble': R.banner('FUMBLE!', { dur: 1.6, color: '#ff4d1f' }); if (sfx) { Audio.roar(0.7, 2); Audio.call('fumble', true); } break;
           case 'recovered': R.banner('TURNOVER!', { big: false, dur: 1.4 }); break;
-          case 'sack': R.banner('SACK!', { dur: 1.5, color: '#ff4d1f' }); if (R.cheer) R.cheer(0.6); if (sfx) { Audio.roar(0.6, 2); Audio.say('Sacked!'); } break;
+          case 'sack': R.banner('SACK!', { dur: 1.5, color: '#ff4d1f' }); if (R.cheer) R.cheer(0.6); if (sfx) { Audio.roar(0.6, 2); Audio.call('sack', true); } break;
           case 'onfire':
             R.banner(team.abbr + ' ON FIRE!', { dur: 2.4, color: '#ff6a00', band: 'rgba(120,30,0,0.75)' });
             if (R.cheer) R.cheer(0.7);
-            if (sfx) { Audio.play('fire'); Audio.say("They're on fire!"); }
+            if (sfx) { Audio.play('fire'); Audio.call('fire', true); }
             break;
           case 'fireout': if (!demo) R.banner('FIRE\'S OUT', { big: false, dur: 1.2, color: '#6aa0ff' }); break;
           case 'fg':
             if (d.kind === 'xp') R.banner('EXTRA POINT GOOD', { big: false, dur: 1.6 });
-            else { R.banner("IT'S GOOD!", { sub: d.dist + ' YARD FIELD GOAL', dur: 2.2 }); if (sfx) { Audio.roar(0.7, 2.5); Audio.say("It's good!"); } }
+            else { R.banner("IT'S GOOD!", { sub: d.dist + ' YARD FIELD GOAL', dur: 2.2 }); if (sfx) { Audio.roar(0.7, 2.5); Audio.call('fg'); } }
             break;
           case 'fgmiss':
             R.banner(d.kind === 'xp' ? 'XP NO GOOD' : 'NO GOOD!', { dur: 1.8, color: '#9aa3c7' });
-            if (sfx) { Audio.play('buzz'); }
+            if (sfx) { Audio.play('buzz'); if (d.kind !== 'xp') Audio.call('fgmiss'); }
             break;
           case 'twopt': R.banner(d.good ? '2-POINT GOOD!' : '2-POINT NO GOOD', { big: !!d.good, dur: 1.8 }); break;
-          case 'safety': R.banner('SAFETY!', { sub: '+2 ' + (team ? team.abbr : ''), dur: 2.2 }); if (sfx) Audio.say('Safety!'); break;
+          case 'safety': R.banner('SAFETY!', { sub: '+2 ' + (team ? team.abbr : ''), dur: 2.2 }); if (sfx) Audio.call('safety'); break;
           case 'incomplete': R.banner('INCOMPLETE', { big: false, dur: 1.1, color: '#9aa3c7' }); break;
           case 'downs': R.banner('TURNOVER ON DOWNS', { big: false, dur: 1.8 }); break;
           case 'touchback': R.banner('TOUCHBACK', { big: false, dur: 1.3, color: '#9aa3c7' }); break;
@@ -522,7 +537,7 @@
           case 'quarter': R.banner(d.ot ? 'OVERTIME' : 'END OF ' + FB.ordinal(d.q - 1) + ' QUARTER', { dur: 2.2, big: !!d.ot }); if (sfx) Audio.play('buzz'); break;
           case 'final':
             R.banner('FINAL', { dur: 2.6 });
-            if (sfx) { Audio.play('buzz'); Audio.roar(0.9, 4); }
+            if (sfx) { Audio.play('buzz'); Audio.roar(0.9, 4); Audio.call('final', true); }
             break;
           case 'select': if (sfx) Audio.roar(0, 1); break;
         }

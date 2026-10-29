@@ -1,6 +1,6 @@
 # Football Blitz '26
 
-An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 30 yards for a first down, no penalties, late hits, dive tackles, turbo, spin moves and "ON FIRE" streaks. It's presented like a modern sports game: real-time 3D (WebGL), lit and shadowed players in team uniforms with procedural animation, a two-deck stadium with an animated crowd, LED ribbon boards, light towers and jumbotrons, bloom and film tone mapping, a broadcast camera and TV-style score bug, plus slow motion, hit-stop, camera punch-ins and gamepad rumble on big plays.
+An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 7-on-7, 10 yards for a first down, no penalties, late hits, dive tackles, turbo, spin moves and "ON FIRE" streaks. It's presented like a modern sports game: real-time 3D (WebGL), lit and shadowed players in team uniforms with procedural animation, a two-deck stadium with an animated crowd, LED ribbon boards, light towers and jumbotrons, bloom and film tone mapping, a broadcast camera and TV-style score bug, plus slow motion, hit-stop, camera punch-ins and gamepad rumble on big plays.
 
 - **Play online:** https://kalium2.github.io/starwars-browser-game/ (once GitHub Pages is enabled, see below)
 - **Download:** the **DOWNLOAD GAME** button on the title screen gets `football-blitz.zip`. Unzip it and open `index.html`; no install or server is needed. The site is also an installable web app ("Install" / "Add to Home Screen") and works offline after the first visit.
@@ -15,7 +15,7 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - **Instant replay** of big plays (touchdowns, interceptions, onside recoveries, 25+ yard gains) from a low sideline camera.
 - **Extras:** big heads, infinite turbo, weather (rain, snow, fog, random; rain and snow affect footing, throwing and catching) and a secret, fully fictional team unlocked with a code on the title screen.
 - Final screen shows passing, rushing, receiving and defensive leaders. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
-- Synthesized sound effects, crowd and an optional announcer voice. There are no art or audio asset files: every model, texture and sound is generated in code.
+- Arcade sound design: layered hit, whistle, turbo and fanfare effects, a two-layer crowd that reacts to big plays, an original menu music loop, and a hype announcer with varied calls (browser speech). All of it is original and synthesized in code. There are no art or audio asset files: every model, texture and sound is generated in code.
 - Graphics quality is picked automatically (HIGH: bloom, MSAA, 2K shadows, full crowd; LOW: lighter settings for phones and older machines) and can be changed in **Options**. Browsers without WebGL fall back to a 2D renderer.
 
 ## Controls
