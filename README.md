@@ -1,6 +1,6 @@
 # Football Blitz '26
 
-An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 30 yards for a first down, no penalties, late hits, dive tackles, turbo, spin moves and "ON FIRE" streaks. It has a modern look: a perspective broadcast camera, a stadium crowd, neon UI and chrome banners.
+An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 30 yards for a first down, no penalties, late hits, dive tackles, turbo, spin moves and "ON FIRE" streaks. It's presented like a modern sports game: real-time 3D (WebGL), lit and shadowed players in team uniforms with procedural animation, a two-deck stadium with an animated crowd, LED ribbon boards, light towers and jumbotrons, bloom and film tone mapping, a broadcast camera and TV-style score bug, plus slow motion, hit-stop, camera punch-ins and gamepad rumble on big plays.
 
 - **Play online:** https://kalium2.github.io/starwars-browser-game/ (once GitHub Pages is enabled, see below)
 - **Download:** the **DOWNLOAD GAME** button on the title screen gets `football-blitz.zip`. Unzip it and open `index.html`; no install or server is needed. The site is also an installable web app ("Install" / "Add to Home Screen") and works offline after the first visit.
@@ -11,7 +11,8 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - Every player is built from one **character template**, and their ratings come from **fantasy stats** (see below).
 - 1 player vs CPU (3 skill levels) or 2 players on one machine. Keyboard, gamepad and touch all work.
 - 9 offensive plays plus punt and field goal; 9 defensive calls. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
-- Synthesized sound effects, crowd and an optional announcer voice. There are no asset files at all.
+- Synthesized sound effects, crowd and an optional announcer voice. There are no art or audio asset files: every model, texture and sound is generated in code.
+- Graphics quality is picked automatically (HIGH: bloom, MSAA, 2K shadows, full crowd; LOW: lighter settings for phones and older machines) and can be changed in **Options**. Browsers without WebGL fall back to a 2D renderer.
 
 ## Controls
 
@@ -53,7 +54,9 @@ js/data/teams.js        32 teams, colors, 2026 rosters
 js/plays.js             playbook (formations, routes, defensive calls)
 js/engine.js            simulation: physics, AI, rules, clock, stats
 js/ai.js                CPU play calling
-js/render.js            perspective renderer, HUD, banners, particles
+js/render3d.js          3D renderer: player models and animation, stadium, crowd, camera, effects
+js/render.js            HUD overlay and banners; also the 2D fallback renderer
+js/vendor/three.bundle.js  three.js r160 (MIT license, see js/vendor/THREE-LICENSE.txt)
 js/audio.js             WebAudio sound and speech announcer
 js/input.js             keyboard, gamepad and touch input
 js/ui.js, js/main.js    screens and app loop

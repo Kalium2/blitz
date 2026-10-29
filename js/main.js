@@ -16,7 +16,9 @@
     paused: false,
     twoPlayer: false,
     lastTeams: null,
-    opts: { qlen: 120, diff: 1, sound: true, announcer: true },
+    opts: { qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto' },
+    slow: { scale: 1, t: 0 },
+    hitstop: 0,
     acc: 0,
     last: 0,
     finalShown: false,
@@ -26,7 +28,12 @@
       this.loadOpts();
       Input.init();
       this.canvas = document.getElementById('game');
-      this.renderer = new FB.Renderer(this.canvas);
+      var isTouchDev = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      var lowEnd = isTouchDev || (navigator.hardwareConcurrency || 8) <= 4 || Math.min(screen.width, screen.height) < 500;
+      this.quality = this.opts.gfx === 'auto' ? (lowEnd ? 'low' : 'high') : this.opts.gfx;
+      this.renderer = FB.createRenderer3D ? FB.createRenderer3D(document.getElementById('game3d'), this.canvas, this.quality) : null;
+      if (this.renderer) document.body.classList.add('gl');
+      else this.renderer = new FB.Renderer(this.canvas);
       var self = this;
       window.addEventListener('resize', function () { self.renderer.resize(); });
       UI.init(function (screen, action) { self.onMenu(screen, action); });
@@ -60,6 +67,7 @@
           if (o.diff >= 0 && o.diff <= 2) this.opts.diff = o.diff;
           this.opts.sound = o.sound !== false;
           this.opts.announcer = o.announcer !== false;
+          if (['auto', 'high', 'low'].indexOf(o.gfx) >= 0) this.opts.gfx = o.gfx;
         }
       } catch (e) { /* storage unavailable */ }
       Audio.enabled = this.opts.sound;
@@ -74,6 +82,7 @@
       UI.setLabel('options', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('pause', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('options', 'announcer', 'ANNOUNCER VOICE: ' + (this.opts.announcer ? 'ON' : 'OFF'));
+      UI.setLabel('options', 'gfx', 'GRAPHICS: ' + this.opts.gfx.toUpperCase() + (this.opts.gfx === 'auto' ? ' (' + (this.quality || 'high').toUpperCase() + ')' : ''));
     },
 
     // ------------------------------------------------------- menus
@@ -93,6 +102,12 @@
         else if (action === 'diff') o.diff = (o.diff + 1) % 3;
         else if (action === 'sound') { o.sound = !o.sound; Audio.setEnabled(o.sound); }
         else if (action === 'announcer') { o.announcer = !o.announcer; Audio.announcer = o.announcer; }
+        else if (action === 'gfx') {
+          o.gfx = { auto: 'high', high: 'low', low: 'auto' }[o.gfx];
+          this.saveOpts();
+          location.reload();
+          return;
+        }
         else if (action === 'back') UI.hide('options');
         this.saveOpts(); this.applyOptLabels();
       } else if (screen === 'howto') {
@@ -139,7 +154,7 @@
     startDemo: function () {
       var n = FB.TEAMS.length, a = Math.floor(Math.random() * n), b = (a + 1 + Math.floor(Math.random() * (n - 1))) % n;
       this.demo = new FB.Game({ teams: [FB.TEAMS[a], FB.TEAMS[b]], humans: [], quarterLen: 90, attract: true });
-      this.renderer.banners = [];
+      this.renderer.reset();
     },
 
     startGame: function (a, b) {
@@ -150,9 +165,8 @@
       this.mode = 'game';
       this.finalShown = false;
       this.selecting = false;
-      this.renderer.banners = [];
-      this.renderer.particles = [];
-      this.renderer.cam.init = false;
+      this.renderer.reset();
+      this.slow = { scale: 1, t: 0 }; this.hitstop = 0;
       document.getElementById('touch').classList.add('show');
       Audio.init();
       Audio.roar(0.6, 3);
@@ -200,12 +214,21 @@
         this.setPaused(true);
       }
 
+      // team select: 3D showcase of both uniforms
+      if (this.mode === 'teams' && this.renderer.renderShowcase && UI.teamSel) {
+        this.renderer.renderShowcase(FB.TEAMS[UI.teamSel.idx[0]], FB.TEAMS[UI.teamSel.idx[1]], dt);
+        return;
+      }
       var g = this.mode === 'game' ? this.game : this.demo;
       if (!g) return;
       var blocked = this.paused || (this.mode === 'game' && (UI.isOpen('howto')));
+      // game feel: hit-stop and slow motion on big moments
+      var simDt = dt;
+      if (this.hitstop > 0) { this.hitstop -= dt; simDt = 0; }
+      else if (this.slow.t > 0) { this.slow.t -= dt; simDt = dt * this.slow.scale; }
       if (!blocked) {
         // fixed-step simulation
-        this.acc += dt;
+        this.acc += simDt;
         var h = 1 / 60, n = 0;
         var gameInputs = this.mode === 'game' && !UI.ps && !UI.isOpen('pat') ? inputs : [];
         while (this.acc >= h && n < 6) {
@@ -220,9 +243,10 @@
         if (this.mode === 'game') this.manageGame(g);
         else if (g.over) this.startDemo();
       }
-      this.renderer.render(g, blocked ? 0 : dt);
-      if (this.mode === 'game' || this.mode === 'title') {
-        this.renderer.drawHUD(g, { hint: this.mode === 'game' ? this.hint(g) : null });
+      this.renderer.render(g, blocked ? 0 : (simDt > 0 ? Math.max(simDt, dt * 0.25) : 0));
+      if (this.mode === 'game') {
+        var touchOn = document.body.classList.contains('touch') && this.mode === 'game';
+        this.renderer.drawHUD(g, { hint: this.mode === 'game' ? this.hint(g) : null, top: touchOn || this.mode === 'title' });
       }
       this.renderer.drawBanners(blocked ? 0 : dt);
       if (g.phase === 'break' && g.breakMsg && this.mode === 'game') {
@@ -294,6 +318,8 @@
       return null;
     },
 
+    slowmo: function (scale, secs) { this.slow = { scale: scale, t: secs }; },
+
     // ------------------------------------------------- events -> FX
     handleEvents: function (g) {
       var R = this.renderer, demo = this.mode !== 'game', self = this;
@@ -304,16 +330,20 @@
         switch (e.type) {
           case 'whistle': if (sfx) Audio.play('whistle'); break;
           case 'snap': if (sfx) Audio.play('snap'); break;
-          case 'throw': if (sfx) Audio.play('throw'); break;
+          case 'throw': if (sfx) Audio.play('throw'); if (R.notify) R.notify('throw', d); break;
           case 'kick': if (sfx) Audio.play('kick'); break;
           case 'catch':
             if (sfx) { Audio.play('catch'); Audio.roar(0.25, 1.4); }
+            if (R.cheer) R.cheer(0.25);
             break;
           case 'switch': if (sfx) Audio.play('switch'); break;
           case 'spin': if (sfx) Audio.play('spin'); break;
           case 'hit':
             if (d.p) R.burst(d.p.x, d.p.y, 1.0, d.big ? 18 : 8, ['#ffffff', '#ffe14a', '#9be38a'], d.big ? 6 : 3, 0.09);
-            if (d.big) { R.shake = Math.max(R.shake, demo ? 0.3 : 0.8); if (!demo) R.flash = 0.4; }
+            if (d.big) {
+              R.shake = Math.max(R.shake, demo ? 0.3 : 0.8);
+              if (!demo) { R.flash = 0.25; R.punch = 1; self.hitstop = 0.07; self.slowmo(0.45, 0.35); Input.rumble(1, 0.6, 220); }
+            } else if (!demo) Input.rumble(0.4, 0.3, 90);
             if (sfx) Audio.play(d.big ? 'bighit' : 'hit');
             break;
           case 'pancake': if (!demo && Math.random() < 0.5) R.banner('PANCAKE!', { big: false, dur: 1.1 }); break;
@@ -327,17 +357,23 @@
             R.banner('TOUCHDOWN!', { sub: team ? team.city.toUpperCase() + ' ' + team.name.toUpperCase() : '', dur: 2.6 });
             if (d.p) for (var i = 0; i < 4; i++) R.burst(d.p.x, d.p.y, 2, 24, [team.c.jersey, team.c.trim, '#ffffff', '#ffd23a'], 8, 0.14);
             if (sfx) { Audio.play('td'); Audio.roar(1, 4); Audio.say('Touchdown!'); }
+            if (R.confetti && d.p) R.confetti(d.p.x, d.p.y, [team.c.jersey, team.c.trim, '#ffffff', '#ffd23a']);
+            if (R.cheer) R.cheer(1);
+            if (!demo) { self.slowmo(0.35, 1.0); Input.rumble(0.8, 0.8, 400); }
             break;
           case 'first': R.banner('FIRST DOWN', { big: false, dur: 1.4 }); if (sfx) Audio.say('First down'); break;
           case 'int':
             R.banner('INTERCEPTED!', { dur: 1.8, color: '#2ee6ff' });
+            if (R.cheer) R.cheer(0.8);
+            if (!demo) { self.slowmo(0.4, 0.6); R.punch = 1; }
             if (sfx) { Audio.roar(0.8, 2.5); Audio.say('Intercepted!'); }
             break;
           case 'fumble': R.banner('FUMBLE!', { dur: 1.6, color: '#ff4d1f' }); if (sfx) { Audio.roar(0.7, 2); Audio.say('Fumble!'); } break;
           case 'recovered': R.banner('TURNOVER!', { big: false, dur: 1.4 }); break;
-          case 'sack': R.banner('SACK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) { Audio.roar(0.6, 2); Audio.say('Sacked!'); } break;
+          case 'sack': R.banner('SACK!', { dur: 1.5, color: '#ff4d1f' }); if (R.cheer) R.cheer(0.6); if (sfx) { Audio.roar(0.6, 2); Audio.say('Sacked!'); } break;
           case 'onfire':
-            R.banner(team.abbr + ' ON FIRE!', { dur: 2.4, color: '#ff6a00' });
+            R.banner(team.abbr + ' ON FIRE!', { dur: 2.4, color: '#ff6a00', band: 'rgba(120,30,0,0.75)' });
+            if (R.cheer) R.cheer(0.7);
             if (sfx) { Audio.play('fire'); Audio.say("They're on fire!"); }
             break;
           case 'fireout': if (!demo) R.banner('FIRE\'S OUT', { big: false, dur: 1.2, color: '#6aa0ff' }); break;

@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <canvas id="game3d"></canvas>
   <canvas id="game"></canvas>
 
   <!-- TITLE -->
@@ -144,6 +145,7 @@
         <button class="menu-item" data-action="diff">CPU SKILL: PRO</button>
         <button class="menu-item" data-action="sound">SOUND: ON</button>
         <button class="menu-item" data-action="announcer">ANNOUNCER VOICE: ON</button>
+        <button class="menu-item" data-action="gfx">GRAPHICS: AUTO</button>
         <button class="menu-item" data-action="back">BACK</button>
       </nav>
       <p class="note" id="roster-note"></p>
@@ -163,12 +165,14 @@
 
   <noscript><p class="noscript">Football Blitz needs JavaScript enabled.</p></noscript>
 
+  <script src="js/vendor/three.bundle.js"></script>
   <script src="js/data/template.js"></script>
   <script src="js/data/teams.js"></script>
   <script src="js/plays.js"></script>
   <script src="js/ai.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/render.js"></script>
+  <script src="js/render3d.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/input.js"></script>
   <script src="js/ui.js"></script>

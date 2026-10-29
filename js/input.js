@@ -123,6 +123,16 @@
       return out;
     },
 
+    // Gamepad rumble (where the browser supports it).
+    rumble: function (strong, weak, ms) {
+      var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (var i = 0; i < pads.length; i++) {
+        var a = pads[i] && pads[i].vibrationActuator;
+        if (a && a.playEffect) { try { a.playEffect('dual-rumble', { duration: ms, strongMagnitude: strong, weakMagnitude: weak }); } catch (e) { /* unsupported */ } }
+      }
+      if (this.touch.active && navigator.vibrate && strong > 0.5) { try { navigator.vibrate(Math.min(60, ms)); } catch (e) { /* unsupported */ } }
+    },
+
     // ----------------------------------------------------------- touch
     initTouch: function (root) {
       var self = this, t = this.touch;

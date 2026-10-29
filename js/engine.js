@@ -806,7 +806,7 @@
     this.stats.team[qb.team].att++;
     this.pstat(qb).att++;
     this.throwTime = this.playT;
-    this.emit('throw', {});
+    this.emit('throw', { p: qb });
   };
 
   // Sail the ball out of bounds: always incomplete.
