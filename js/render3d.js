@@ -157,6 +157,9 @@
   }
   function tube(points, r, seg) { return new T.TubeGeometry(new T.CatmullRomCurve3(points.map(function (p) { return new T.Vector3(p[0], p[1], p[2]); })), seg || 20, r, 6, false); }
 
+  var POWER_COLORS = { speed: '#2ee6ff', hands: '#3dff8b', tank: '#ff4d1f' };
+  FB.POWER_COLORS = POWER_COLORS;
+
   var GEO = null;
   function geos() {
     if (GEO) return GEO;
@@ -558,6 +561,15 @@
     this.targetRing = ring('#ffe14a', 0.75, 0.92);
     this.landRing = ring('#fff07a', 0.85, 1.0);
 
+    // power-up token: spinning gem over a light pillar
+    this.token = new T.Group();
+    this.tokenGem = new T.Mesh(new T.OctahedronGeometry(0.42, 0), new T.MeshStandardMaterial({ color: '#ffffff', emissive: '#ffffff', emissiveIntensity: 1.6, roughness: 0.2, metalness: 0.3 }));
+    this.tokenGem.position.y = 1.2; this.token.add(this.tokenGem);
+    this.tokenBeam = new T.Mesh(new T.CylinderGeometry(0.5, 0.7, 6, 20, 1, true), new T.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.18, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending, toneMapped: false }));
+    this.tokenBeam.position.y = 3; this.token.add(this.tokenBeam);
+    this.token.visible = false;
+    S.add(this.token);
+
     // football
     var G = geos();
     this.ball = new T.Group();
@@ -741,6 +753,22 @@
       tp.tL = 0.35; tp.tR = 0.2; tp.kL = 0.2; tp.kR = 0.4; tp.lean = 0.1;
       return tp;
     }
+    if (p.kickT > 0) {
+      var kp = 1 - p.kickT / 0.45;
+      tp.tR = lerp(0.9, -1.8, kp); tp.kR = lerp(1.5, 0.05, kp); tp.tL = -0.1; tp.kL = 0.25;
+      tp.aL = { p: -1.3, r: 0.7, e: -0.3 }; tp.aR = { p: 0.4, r: 0.5, e: -0.2 }; tp.lean = -0.15;
+      return tp;
+    }
+    var ka = g.kickAnim;
+    if (g.phase === 'anim' && ka && p === ka.holder && ka.kind !== 'punt') {
+      tp.tL = -1.25; tp.kL = 2.3; tp.tR = -0.2; tp.kR = 1.6; tp.lean = 0.35;
+      tp.aL = { p: -1.0, r: -0.1, e: -0.4 }; tp.aR = { p: -1.1, r: -0.1, e: -0.2 };
+      return tp;
+    }
+    if (g.phase === 'anim' && ka && (ka.stage === 'set' || ka.stage === 'meter' || ka.stage === 'wait' || ka.stage === 'snap')) {
+      if (p === ka.kicker && ka.kind === 'punt') { tp.aL = { p: -1.2, r: 0.1, e: -0.3 }; tp.aR = { p: -1.2, r: 0.1, e: -0.3 }; tp.lean = 0.15; return tp; }
+      if (p !== ka.kicker) { crouchLegs(tp, 0.85); tp.lean = 0.95; tp.aL = { p: -1.2, r: 0.1, e: -0.1 }; tp.aR = { p: -1.2, r: 0.1, e: -0.1 }; return tp; }
+    }
     var stance = 0;
     if (g.phase === 'presnap' && g.playType !== 'kickoff') {
       var role = p.role, key = p.key;
@@ -865,6 +893,9 @@
       // turf kicked up by hard cuts
       var sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
       if (sp > 7 && Math.random() < dt * 6) self.solid.spawn({ x: p.x, y: p.y, z: 0.05, vx: rnd(-1, 1) - p.vx * 0.1, vy: rnd(-1, 1) - p.vy * 0.1, vz: rnd(1, 3), life: 0.5, max: 0.5, color: Math.random() < 0.5 ? '#3d7a35' : '#5a3a20', size: 0.07, grav: 12 });
+      // power-up aura
+      var pw = g.powerOf && g.powerOf(p);
+      if (pw && Math.random() < dt * 14) self.glow.spawn({ x: p.x + rnd(-0.4, 0.4), y: p.y + rnd(-0.4, 0.4), z: rnd(0.1, 2), vx: 0, vy: 0, vz: rnd(0.8, 1.6), life: 0.6, max: 0.6, color: POWER_COLORS[pw], size: 0.12, grav: -1 });
       // on fire
       if (g.fire[p.team] && (p.ctl >= 0 || g.ball.holder === p) && Math.random() < dt * 40) {
         self.glow.spawn({ x: p.x + rnd(-0.3, 0.3), y: p.y + rnd(-0.3, 0.3), z: rnd(0.1, 1.8), vx: 0, vy: 0, vz: rnd(2, 4), life: 0.45, max: 0.45, color: Math.random() < 0.5 ? '#ff5a00' : '#ffc400', size: 0.28, fire: true, grav: -2 });
@@ -916,6 +947,14 @@
         self.ctlRings[i].position.set(p.x, 0.04, p.y); self.ctlDiscs[i].position.set(p.x, 0.035, p.y);
       }
     });
+    var tk = g.token;
+    this.token.visible = !!tk && g.phase !== 'anim';
+    if (tk) {
+      var col = POWER_COLORS[tk.type];
+      this.tokenGem.material.color.set(col); this.tokenGem.material.emissive.set(col); this.tokenBeam.material.color.set(col);
+      this.token.position.set(tk.x, 0, tk.y);
+      this.tokenGem.rotation.y = this.time * 2.2; this.tokenGem.position.y = 1.2 + Math.sin(this.time * 3) * 0.15;
+    }
     var tg = g.passTarget;
     this.targetRing.visible = !!tg;
     if (tg) { var s = 1 + ((this.time * 3) % 1) * 0.6; this.targetRing.scale.set(s, s, s); this.targetRing.position.set(tg.x, 0.045, tg.y); this.targetRing.material.opacity = 1 - ((this.time * 3) % 1) * 0.8; }

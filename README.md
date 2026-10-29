@@ -12,6 +12,11 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - 1 player vs CPU (3 skill levels) or 2 players on one machine. Keyboard, gamepad and touch all work.
 - 9 offensive plays plus punt, field goal, **fake punt**, **fake field goal** and **MY PLAY** (from the **Create a Play** editor); 9 defensive calls. Any offensive play can be **flipped** (TURBO on play select).
 - Arcade moves: **bullet passes** (hold TURBO when throwing), **stiff-arms** (TURBO+ACTION), **laterals** (TURBO+SPECIAL), spins, hurdles, dive tackles and late hits. **Audibles** at the line (SPECIAL) for offense and defense. **Onside kicks** (SPECIAL when kicking off).
+- **Tackling:** contact brings the carrier down; only a timed move beats it (spin vs. arm tackles, stiff-arm vs. tacklers in front, hurdle vs. dives). **Turbo refills at the start of every play.**
+- **Passing:** throws go where you aim, led to the receiver; incompletions and picks come from defenders in the throwing lane (a lob can float over a short defender, a bullet can't). Any ball carrier still behind the line of scrimmage can throw.
+- **Kicking:** real snap, holder and run-up, with a two-press power/aim meter for field goals, extra points and punts and a power meter for kickoffs. Kicks fly with gravity and **wind** (shown in the HUD); field goals are good only if the ball clears the bar between the uprights.
+- **Power-ups:** a glowing token sometimes appears on the field. Touch it for SPEED, HANDS or TANK for a few plays.
+- **Smarter teammates:** hot routes against blitzes, a scramble drill when the QB extends the play, and lead blocking for the ball carrier.
 - **Instant replay** of big plays (touchdowns, interceptions, onside recoveries, 25+ yard gains) from a low sideline camera.
 - **Extras:** big heads, infinite turbo, weather (rain, snow, fog, random; rain and snow affect footing, throwing and catching) and a secret, fully fictional team unlocked with a code on the title screen.
 - Final screen shows passing, rushing, receiving and defensive leaders. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.

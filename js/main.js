@@ -16,7 +16,7 @@
     paused: false,
     twoPlayer: false,
     lastTeams: null,
-    opts: { music: true, qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
+    opts: { wind: true, powerups: true, music: true, qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
     rec: { frames: [], players: null },
     replay: null,
     replayPending: false,
@@ -90,6 +90,8 @@
           this.opts.replays = o.replays !== false;
           this.opts.unlocked = !!o.unlocked;
           this.opts.music = o.music !== false;
+          this.opts.wind = o.wind !== false;
+          this.opts.powerups = o.powerups !== false;
         }
       } catch (e) { /* storage unavailable */ }
       Audio.enabled = this.opts.sound;
@@ -110,6 +112,8 @@
       UI.setLabel('extras', 'infturbo', 'INFINITE TURBO: ' + (this.opts.infTurbo ? 'ON' : 'OFF'));
       UI.setLabel('extras', 'weather', 'WEATHER: ' + this.opts.weather.toUpperCase());
       UI.setLabel('extras', 'replays', 'INSTANT REPLAYS: ' + (this.opts.replays ? 'ON' : 'OFF'));
+      UI.setLabel('extras', 'wind', 'WIND: ' + (this.opts.wind ? 'ON' : 'OFF'));
+      UI.setLabel('extras', 'powerups', 'POWER-UPS: ' + (this.opts.powerups ? 'ON' : 'OFF'));
       var hn = document.getElementById('hidden-note');
       if (hn) hn.textContent = this.opts.unlocked ? 'SECRET TEAM: BLITZ LEGENDS UNLOCKED. Find them at the end of the team list.' : 'SECRET TEAM: LOCKED. Hint: type the name of the game on the title screen.';
       UI.setLabel('options', 'gfx', 'GRAPHICS: ' + this.opts.gfx.toUpperCase() + (this.opts.gfx === 'auto' ? ' (' + (this.quality || 'high').toUpperCase() + ')' : ''));
@@ -134,6 +138,8 @@
         else if (action === 'infturbo') o.infTurbo = !o.infTurbo;
         else if (action === 'weather') { var W = ['clear', 'rain', 'snow', 'fog', 'random']; o.weather = W[(W.indexOf(o.weather) + 1) % W.length]; }
         else if (action === 'replays') o.replays = !o.replays;
+        else if (action === 'wind') o.wind = !o.wind;
+        else if (action === 'powerups') o.powerups = !o.powerups;
         else if (action === 'back') UI.hide('extras');
         this.saveOpts(); this.applyOptLabels();
       } else if (screen === 'createplay') {
@@ -207,7 +213,7 @@
       var humans = [{ slot: 0, team: 0 }];
       if (this.twoPlayer) humans.push({ slot: 1, team: 1 });
       var weather = this.opts.weather === 'random' ? ['clear', 'clear', 'rain', 'snow', 'fog'][Math.floor(Math.random() * 5)] : this.opts.weather;
-      this.game = new FB.Game({ teams: [FB.TEAMS[a], FB.TEAMS[b]], humans: humans, quarterLen: this.opts.qlen, difficulty: this.opts.diff, weather: weather, infTurbo: this.opts.infTurbo });
+      this.game = new FB.Game({ teams: [FB.TEAMS[a], FB.TEAMS[b]], humans: humans, quarterLen: this.opts.qlen, difficulty: this.opts.diff, weather: weather, infTurbo: this.opts.infTurbo, wind: this.opts.wind, powerups: this.opts.powerups });
       if (this.renderer.setWeather) this.renderer.setWeather(weather);
       this.replay = null; this.replayPending = false; this.rec = { frames: [], players: null };
       this.mode = 'game';
@@ -368,7 +374,9 @@
       var c = g.ctl[0], pad = Input.lastDevice === 'gamepad', touch = document.body.classList.contains('touch') && Input.touch.active;
       var A = touch ? 'GO' : pad ? 'A' : 'SPACE', T = touch ? 'TURBO' : pad ? 'X' : 'SHIFT', S = touch ? 'JUMP' : pad ? 'B' : 'E';
       var b = g.ball;
+      if (g.phase === 'anim' && g.kickAnim && g.kickAnim.human && g.kickAnim.stage === 'meter') return A + ': ' + (g.kickAnim.power == null ? 'SET POWER' : 'SET AIM (CENTER = STRAIGHT, AIM INTO THE WIND)');
       if (g.phase === 'presnap') {
+        if (g.playType === 'kickoff' && g.koMeter && !g.koMeter.set && c.team === g.kickTeam) return A + ': SET KICK POWER  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '');
         if (g.playType === 'kickoff') return c.team === g.kickTeam ? A + ': KICK  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '') : null;
         if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE';
         return A + ': SWITCH DEFENDER  \u2022  ' + S + ': AUDIBLE';
@@ -459,6 +467,13 @@
             if (sfx) Audio.play('whistle');
             if (!demo && g.result && g.result.data && g.result.data.x != null && g.playType !== 'kickoff' && g.result.ballTeam === g.poss && (g.result.data.x - g.losX) * g.dir >= 25) self.replayPending = true;
             break;
+          case 'meter': if (sfx) Audio.play('select'); break;
+          case 'powerup':
+            R.banner({ speed: 'SPEED BOOST!', hands: 'MAGNET HANDS!', tank: 'TANK MODE!' }[d.type], { sub: d.p && d.p.info.name ? d.p.info.name.toUpperCase() : '', dur: 1.8, color: (FB.POWER_COLORS || {})[d.type] });
+            if (sfx) { Audio.play('fire'); }
+            if (d.p) R.burst(d.p.x, d.p.y, 1.2, 24, [(FB.POWER_COLORS || {})[d.type] || '#fff', '#ffffff'], 5, 0.1);
+            break;
+          case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
           case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.call('audible'); } break;
           case 'onsidecall': if (sfx) Audio.play('switch'); break;
           case 'onside': R.banner('ONSIDE KICK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) Audio.call('onside'); break;
@@ -523,7 +538,7 @@
             else { R.banner("IT'S GOOD!", { sub: d.dist + ' YARD FIELD GOAL', dur: 2.2 }); if (sfx) { Audio.roar(0.7, 2.5); Audio.call('fg'); } }
             break;
           case 'fgmiss':
-            R.banner(d.kind === 'xp' ? 'XP NO GOOD' : 'NO GOOD!', { dur: 1.8, color: '#9aa3c7' });
+            R.banner(d.kind === 'xp' ? 'XP NO GOOD' : 'NO GOOD!', { sub: d.why === 'short' ? 'SHORT' : d.why === 'wide' ? 'WIDE' : '', dur: 1.8, color: '#9aa3c7' });
             if (sfx) { Audio.play('buzz'); if (d.kind !== 'xp') Audio.call('fgmiss'); }
             break;
           case 'twopt': R.banner(d.good ? '2-POINT GOOD!' : '2-POINT NO GOOD', { big: !!d.good, dur: 1.8 }); break;
