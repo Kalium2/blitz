@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1440"/><stop offset="1" stop-color="#07081a"/></linearGradient>
+    <linearGradient id="fire" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe0"/><stop offset=".4" stop-color="#ffd23a"/><stop offset=".6" stop-color="#ff7a00"/><stop offset="1" stop-color="#a01800"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <g transform="rotate(-30 256 256)">
+    <ellipse cx="256" cy="256" rx="190" ry="112" fill="#7a3f17" stroke="#0a0a18" stroke-width="14"/>
+    <path d="M150 256h212" stroke="#fff" stroke-width="12" stroke-linecap="round"/>
+    <path d="M196 236v40M228 236v40M260 236v40M292 236v40M324 236v40" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <text x="256" y="452" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="118" font-style="italic" font-weight="900" fill="url(#fire)" stroke="#0a0a18" stroke-width="8" paint-order="stroke">BLITZ</text>
+</svg>

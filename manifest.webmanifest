@@ -1,0 +1,16 @@
+{
+  "name": "Football Blitz '26",
+  "short_name": "Blitz '26",
+  "description": "Arcade 7-on-7 football with 2026 NFL rosters rated from fantasy stats.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#07081a",
+  "theme_color": "#07081a",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
