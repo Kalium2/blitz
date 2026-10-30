@@ -607,7 +607,7 @@
   };
 
   // The QB's cadence before every scrimmage snap: HUT, HUT, HIKE!, then the ball.
-  var CADENCE = { words: ['HUT', 'HUT', 'HIKE'], at: [0, 0.42, 0.84], snap: 1.05 };
+  var CADENCE = { words: ['HUT', 'HUT', 'HIKE'], at: [0, 0.42, 0.84], snap: 0.87 };
 
   G.updatePresnap = function (dt, inputs) {
     var self = this;
@@ -711,6 +711,20 @@
     }
     this.emit('snap', {});
     this.stats.team[this.poss].plays++;
+    // Jumping the snap: a defender you control who is already driving forward
+    // when the ball moves explodes off the line, and for a moment the blockers
+    // can't pick him up.
+    var self = this;
+    this.ctl.forEach(function (c) {
+      var d = c.pl;
+      if (!d || c.team === self.poss || d.state !== 'ok') return;
+      var wl = len(d.want.x, d.want.y);
+      if (wl < 0.3 || (d.want.x / wl) * -self.dir < 0.2) return;   // must be heading into the backfield
+      d.immune = 0.55; d.immuneTo = null;
+      var sp = self.maxSpeed(d) * 0.7;
+      d.vx = d.want.x / wl * sp; d.vy = d.want.y / wl * sp;
+      self.emit('getoff', { p: d });
+    });
     if (this.playType === 'run' && this.offPlay.pitch) this.pitchAt = 0.18;
   };
 
@@ -782,6 +796,21 @@
       if (b.holder !== this.heldBy) { this.heldBy = b.holder; this.heldT = 0; }
       else this.heldT += dt;
     } else { this.heldBy = null; this.heldT = 0; }
+    // a QB in his throwing motion lets it go at the end of the wind-up
+    var wq = b.state === 'held' ? b.holder : null;
+    if (wq && wq.windT > 0) {
+      wq.windT -= dt;
+      if (wq.windT <= 0 && wq.pendingThrow && !this.canPass(wq)) wq.pendingThrow = null;   // drifted past the line
+      if (wq.windT <= 0 && wq.pendingThrow) {
+        var pt = wq.pendingThrow, o = pt.opt; wq.pendingThrow = null;
+        // re-lead a receiver for the time spent winding up
+        if (o.plan && o.plan.lock && o.plan.rec) {
+          var pr = o.plan.rec;
+          o.plan = Object.assign({}, o.plan, { tx: o.plan.tx + pr.vx * THROW_WINDUP * 0.92, ty: o.plan.ty + pr.vy * THROW_WINDUP * 0.92 });
+        }
+        this.throwTo(wq, pt.rec, pt.bullet, Object.assign({}, o, { release: true }));
+      }
+    }
     this.autoControl();
 
     // ---- humans
@@ -847,6 +876,7 @@
     var b = this.ball, self = this;
     if (this.playType === 'kickoff' && b.state === 'air' && c.team === this.poss) return;
     var hasBall = b.state === 'held' && b.holder === p;
+    if (hasBall && p.windT > 0) return;
     if (hasBall) {
       if (this.canPass(p) && inp.rec) {
         var tr = this.off[RECEIVERS[inp.rec - 1]];
@@ -1038,6 +1068,7 @@
     if (this.weather === 'rain') sp *= 0.97;
     if (this.weather === 'snow') sp *= 0.95;
     if (p.stumble > 0) { p.stumble -= dt; sp *= 0.5; }
+    if (p.windT > 0) sp *= 0.35;   // planted in the throwing motion
     var wl = len(p.want.x, p.want.y), tx = 0, ty = 0;
     if (wl > 0.02) {
       var m = Math.min(1, wl) * p.wantSpeed;
@@ -1132,8 +1163,8 @@
     var t = base + (bl.r.str - (d.r.prs * 0.55 + d.r.str * 0.45)) / 22 + rnd(-0.45, 0.75);
     if (this.fire[d.team]) t *= 0.6;
     if (this.fire[bl.team]) t *= 1.25;
-    if (d.ctl >= 0) t *= 0.35; // the player you control fights off blocks quickly
-    bl.eng = d; d.eng = bl; bl.engT = clamp(t, ol ? 0.35 : 0.2, ol ? 3.2 : 1.4); bl.blocking = true;
+    if (d.ctl >= 0) t *= 0.25; // the player you control fights off blocks quickly
+    bl.eng = d; d.eng = bl; bl.engT = clamp(t, d.ctl >= 0 ? 0.15 : ol ? 0.35 : 0.2, ol ? 3.2 : 1.4); bl.blocking = true;
     // occasional pancake
     if (bl.r.str - d.r.str > 4 && Math.random() < 0.07) {
       d.state = 'down'; d.st = 0.9;
@@ -1264,9 +1295,20 @@
   // bullet = turbo pass: a harder, flatter throw that is a little less accurate.
   // opt.plan (from planPass) overrides the receiver lead; opt.accMul scales the
   // throw's error (a perfectly timed release is much tighter).
+  // A pass starts with a wind-up: the QB keeps the ball through his throwing
+  // motion and it leaves his hand THROW_WINDUP seconds later, so a rusher who
+  // gets there in time still gets the sack.
+  var THROW_WINDUP = 0.2;
   G.throwTo = function (qb, rec, bullet, opt) {
     var b = this.ball;
     opt = opt || {};
+    if (!opt.release) {
+      if (qb.windT > 0 || this.passThrown) return;
+      qb.windT = THROW_WINDUP;
+      qb.pendingThrow = { rec: rec, bullet: bullet, opt: opt };
+      this.emit('windup', { p: qb });
+      return;
+    }
     var plan = opt.plan || this.planPass(qb, rec, bullet ? 1 : 0.5, rec, false);
     var tx = plan.tx, ty = plan.ty, d = plan.d, sp = plan.sp;
     var err = 0.12 + (1 - (qb.r.tha - 40) / 60) * 0.55;
@@ -1302,9 +1344,10 @@
 
   // Sail the ball out of bounds: always incomplete.
   G.throwAway = function (qb) {
+    if (qb.windT > 0) return;
     var side = qb.y < MID ? -4 : FW + 4;
     var fake = { x: qb.x + this.dir * 12, y: side, vx: 0, vy: 0, r: qb.r };
-    this.throwTo(qb, fake);
+    this.throwTo(qb, fake, false, { release: true });
     this.ball.tx = fake.x; this.ball.ty = side;
     var d = len(this.ball.tx - qb.x, this.ball.ty - qb.y);
     this.ball.T = d / 20 + 0.1;
@@ -1574,6 +1617,7 @@
   G.tackle = function (c, d) {
     var big = d.state === 'dive' || d.wantTurbo || d.humanTurbo || this.powerOf(d) === 'tank';
     var fumbleP = 0.012 + (big ? 0.02 : 0) - (c.r.str - 70) / 3000;
+    if (c.windT > 0) { fumbleP += 0.2; c.windT = 0; c.pendingThrow = null; }   // strip sack mid-throw
     if (this.fire[d.team]) fumbleP += 0.015;
     if (this.fire[c.team]) fumbleP *= 0.3;
     this.log.tackler = d;
@@ -2041,7 +2085,8 @@
     if (b.state === 'held' || b.state === 'loose') b.state = 'dead-held';
     this.players.forEach(function (p) { if (p.eng) { p.eng = null; } });
     this.emit('whistle', { reason: reason });
-    if (reason === 'td') this.emit('td', { team: data.team, p: data.p });
+    // crossing the goal line on a 2-point try is a conversion, not a touchdown
+    if (reason === 'td') this.emit(this.conversion ? 'twoptscore' : 'td', { team: data.team, p: data.p });
     if (reason === 'safety') this.emit('safety', { team: 1 - data.team });
     if (reason === 'incomplete') this.emit('incomplete', {});
     if (reason === 'touchback') this.emit('touchback', {});

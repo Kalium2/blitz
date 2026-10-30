@@ -593,6 +593,8 @@
           case 'tipped': R.banner(d.batted ? 'BATTED DOWN!' : 'TIPPED!', { big: false, dur: 1.2, color: '#2ee6ff' }); if (sfx) Audio.play('catch'); break;
           case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
           case 'hotroute': if (sfx) Audio.play('switch'); break;
+          case 'windup': if (R.notify) R.notify('throw', d); break;
+          case 'getoff': if (sfx) Audio.play('turbo'); if (!demo) R.banner('GREAT JUMP!', { big: false, dur: 0.8, color: '#2ee6ff' }); break;
           case 'timeoutcalled': if (!demo) R.banner('TIMEOUT CALLED', { big: false, sub: 'AFTER THE PLAY', dur: 1.2, color: '#2ee6ff' }); break;
           case 'timeout':
             R.banner('TIMEOUT', { sub: g.teams[d.team].name.toUpperCase() + '  \u2022  ' + d.left + ' LEFT', dur: 1.8, color: '#2ee6ff' });
@@ -618,7 +620,6 @@
           case 'snap': if (sfx) Audio.play('snap'); break;
           case 'throw':
             if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw');
-            if (R.notify) R.notify('throw', d);
             if (d.perfect) {
               if (sfx) Audio.play('perfect');
               if (d.p) R.burst(d.p.x, d.p.y, 1.9, 22, ['#ffd23a', '#ffffff', '#ff9a1f'], 5, 0.09);
@@ -656,6 +657,11 @@
             if (R.confetti && d.p) R.confetti(d.p.x, d.p.y, [team.c.jersey, team.c.trim, '#ffffff', '#ffd23a']);
             if (R.cheer) R.cheer(1);
             if (!demo) { self.slowmo(0.35, 1.0); Input.rumble(0.8, 0.8, 400); self.replayPending = true; }
+            break;
+          case 'twoptscore':
+            if (d.p) R.burst(d.p.x, d.p.y, 2, 24, [team.c.jersey, team.c.trim, '#ffffff'], 6, 0.12);
+            if (sfx) { Audio.play('fire'); Audio.roar(0.7, 2.5); Audio.say('Two points!', true); }
+            if (R.cheer) R.cheer(0.7);
             break;
           case 'first': R.banner('FIRST DOWN', { big: false, dur: 1.4 }); if (sfx) Audio.call('first'); break;
           case 'int':
