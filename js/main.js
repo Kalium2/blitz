@@ -8,6 +8,7 @@
   var OPTS_KEY = 'fb26-options';
   var QLENS = [60, 120, 180, 240];
   var DIFFS = ['ROOKIE', 'PRO', 'ALL-PRO'];
+  var GAME_SPEED = 0.88;
 
   var App = {
     mode: 'title',        // title | teams | game
@@ -16,7 +17,7 @@
     paused: false,
     twoPlayer: false,
     lastTeams: null,
-    opts: { wind: true, powerups: true, music: true, qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
+    opts: { aimAssist: true, wind: true, powerups: true, music: true, qlen: 120, diff: 1, sound: true, announcer: true, gfx: 'auto', bigHeads: false, infTurbo: false, weather: 'clear', replays: true, unlocked: false },
     rec: { frames: [], players: null },
     replay: null,
     replayPending: false,
@@ -92,6 +93,7 @@
           this.opts.music = o.music !== false;
           this.opts.wind = o.wind !== false;
           this.opts.powerups = o.powerups !== false;
+          this.opts.aimAssist = o.aimAssist !== false;
         }
       } catch (e) { /* storage unavailable */ }
       Audio.enabled = this.opts.sound;
@@ -104,6 +106,7 @@
     applyOptLabels: function () {
       UI.setLabel('options', 'qlen', 'QUARTER LENGTH: ' + FB.fmtClock(this.opts.qlen));
       UI.setLabel('options', 'diff', 'CPU SKILL: ' + DIFFS[this.opts.diff]);
+      UI.setLabel('options', 'aim', 'AIM ASSIST: ' + (this.opts.aimAssist ? 'ON' : 'OFF'));
       UI.setLabel('options', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('pause', 'sound', 'SOUND: ' + (this.opts.sound ? 'ON' : 'OFF'));
       UI.setLabel('options', 'announcer', 'ANNOUNCER VOICE: ' + (this.opts.announcer ? 'ON' : 'OFF'));
@@ -148,6 +151,7 @@
       } else if (screen === 'options') {
         if (action === 'qlen') o.qlen = QLENS[(QLENS.indexOf(o.qlen) + 1) % QLENS.length];
         else if (action === 'diff') o.diff = (o.diff + 1) % 3;
+        else if (action === 'aim') { o.aimAssist = !o.aimAssist; if (this.game) this.game.aimAssist = o.aimAssist; }
         else if (action === 'sound') { o.sound = !o.sound; Audio.setEnabled(o.sound); }
         else if (action === 'announcer') { o.announcer = !o.announcer; Audio.announcer = o.announcer; }
         else if (action === 'music') { o.music = !o.music; Audio.setMusic(o.music); if (o.music && this.mode !== 'game') Audio.startMusic(); }
@@ -213,7 +217,7 @@
       var humans = [{ slot: 0, team: 0 }];
       if (this.twoPlayer) humans.push({ slot: 1, team: 1 });
       var weather = this.opts.weather === 'random' ? ['clear', 'clear', 'rain', 'snow', 'fog'][Math.floor(Math.random() * 5)] : this.opts.weather;
-      this.game = new FB.Game({ teams: [FB.TEAMS[a], FB.TEAMS[b]], humans: humans, quarterLen: this.opts.qlen, difficulty: this.opts.diff, weather: weather, infTurbo: this.opts.infTurbo, wind: this.opts.wind, powerups: this.opts.powerups });
+      this.game = new FB.Game({ teams: [FB.TEAMS[a], FB.TEAMS[b]], humans: humans, quarterLen: this.opts.qlen, difficulty: this.opts.diff, weather: weather, infTurbo: this.opts.infTurbo, aimAssist: this.opts.aimAssist, wind: this.opts.wind, powerups: this.opts.powerups });
       if (this.renderer.setWeather) this.renderer.setWeather(weather);
       this.replay = null; this.replayPending = false; this.rec = { frames: [], players: null };
       this.mode = 'game';
@@ -286,9 +290,10 @@
       else this.aimUI = null;
       var blocked = this.paused || (this.mode === 'game' && (UI.isOpen('howto')));
       // game feel: hit-stop and slow motion on big moments
-      var simDt = dt;
+      // the whole game runs a touch slower than real time so plays are easier to read
+      var simDt = dt * GAME_SPEED;
       if (this.hitstop > 0) { this.hitstop -= dt; simDt = 0; }
-      else if (this.slow.t > 0) { this.slow.t -= dt; simDt = dt * this.slow.scale; }
+      else if (this.slow.t > 0) { this.slow.t -= dt; simDt *= this.slow.scale; }
       if (!blocked) {
         // fixed-step simulation
         this.acc += simDt;

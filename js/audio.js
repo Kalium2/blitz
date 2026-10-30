@@ -52,6 +52,9 @@
   };
   function rnd(a, b) { return a + Math.random() * (b - a); }
 
+  // Crowd mix: the steady stadium bed level, and how hard big plays push the cheering.
+  var CROWD = { bed: 0.2, cheer: 0.5 };
+
   var Audio = {
     bufs: {}, htmlMode: false,
     ctx: null, master: null, fx: null, crowdGain: null, crowdHi: null, music: null,
@@ -140,10 +143,10 @@
     startBed: function () {
       if (this.bed || !this.bufs.stadium_bed) return;
       var self = this, c = this.ctx, buf = this.bufs.stadium_bed, X = 1.5, len = buf.duration - 1;
-      this.bed = c.createGain(); this.bed.gain.value = 0.32; this.bed.connect(this.fx);
+      this.bed = c.createGain(); this.bed.gain.value = CROWD.bed; this.bed.connect(this.fx);
       // the synthesized crowd steps back to a bright sweetener
-      this.crowdBase = [0.03, 0.012];
-      if (this.crowdGain) { this.crowdGain.gain.value = 0.03; this.crowdHi.gain.value = 0.012; }
+      this.crowdBase = [0.02, 0.008];
+      if (this.crowdGain) { this.crowdGain.gain.value = 0.02; this.crowdHi.gain.value = 0.008; }
       var next = c.currentTime + 0.05;
       var schedule = function () {
         while (next < c.currentTime + 4) {
@@ -166,11 +169,11 @@
       // low murmur + bright cheer layer, each with a slow wobble so it never sounds like static
       var low = c.createBufferSource(); low.buffer = this.noiseBuf; low.loop = true;
       var lowF = mk('lowpass', 520, 0.7);
-      this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0.07;
+      this.crowdGain = c.createGain(); this.crowdGain.gain.value = 0.05;
       low.connect(lowF); lowF.connect(this.crowdGain); this.crowdGain.connect(this.fx);
       var hi = c.createBufferSource(); hi.buffer = this.noiseBuf; hi.loop = true; hi.playbackRate.value = 0.83;
       var hiF = mk('bandpass', 1400, 0.6);
-      this.crowdHi = c.createGain(); this.crowdHi.gain.value = 0.015;
+      this.crowdHi = c.createGain(); this.crowdHi.gain.value = 0.01;
       hi.connect(hiF); hiF.connect(this.crowdHi); this.crowdHi.connect(this.fx);
       var lfo = c.createOscillator(), lfoG = c.createGain(); lfo.frequency.value = 0.23; lfoG.gain.value = 180;
       lfo.connect(lfoG); lfoG.connect(lowF.frequency);
@@ -179,11 +182,12 @@
 
     roar: function (amount, dur) {
       if (!this.ctx || !this.crowdGain) return;
-      var t = this.ctx.currentTime, base = this.crowdBase || [0.07, 0.015];
+      var t = this.ctx.currentTime, base = this.crowdBase || [0.05, 0.01];
+      amount *= CROWD.cheer;
       var layers = [[this.crowdGain.gain, base[0], 0.38], [this.crowdHi.gain, base[1], 0.3]];
-      if (this.bed) layers.push([this.bed.gain, 0.32, 0.9]);
-      // big moments get the crowd swell on top
-      if (amount >= 0.5 && this.enabled && t - (this.lastSwell || -9) > 2.5) { this.lastSwell = t; this.sample('swell', 0.35 + amount * 0.45, rnd(0.96, 1.04)); }
+      if (this.bed) layers.push([this.bed.gain, CROWD.bed, 0.9]);
+      // the biggest moments get the crowd swell on top
+      if (amount >= 0.4 && this.enabled && t - (this.lastSwell || -9) > 2.5) { this.lastSwell = t; this.sample('swell', 0.15 + amount * 0.3, rnd(0.96, 1.04)); }
       layers.forEach(function (a) {
         var g = a[0];
         g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);

@@ -51,6 +51,7 @@
     this.attract = !!opts.attract;
     this.weather = opts.weather || 'clear';      // clear | rain | snow | fog
     this.infTurbo = !!opts.infTurbo;             // cheat: humans never run out of turbo
+    this.aimAssist = opts.aimAssist !== false;   // human passes snap to, and favour, open receivers
     // wind: speed in mph and the direction it blows toward (world radians)
     this.wind = opts.wind === false ? { mph: 0, ang: 0 } : { mph: Math.round(rnd(0, 1) < 0.25 ? rnd(0, 3) : rnd(3, 16)), ang: rnd(0, Math.PI * 2) };
     this.powerupsOn = opts.powerups !== false;
@@ -881,11 +882,16 @@
     if (Math.abs(ix) + Math.abs(iy) > 0.3) {
       var tmp = { want: { x: 0, y: 0 } }; this.inputToWant(tmp, inp, false);
       var wx = tmp.want.x, wy = tmp.want.y, wl = len(wx, wy) || 1;
-      var best = null, bs = -1e9;
+      var best = null, bs = -1e9, assist = this.aimAssist, cur = this.passTarget;
       recs.forEach(function (r) {
         var dx = r.x - qb.x, dy = r.y - qb.y, dl = len(dx, dy) || 1;
         var cos = (dx * wx + dy * wy) / (dl * wl);
         var s = cos * 10 - dl * 0.03;
+        if (assist && cos > 0.5) {
+          // aim assist: hold the current target steady; openness only breaks near-ties
+          s += Math.min(6, self.openness(r)) * 0.15;
+          if (r === cur) s += 1.2;
+        }
         if (s > bs) { bs = s; best = r; }
       });
       return best;
@@ -1132,13 +1138,18 @@
     if (!rec) {
       var recs = this.eligible(qb.team).filter(function (r) { return r !== qb; });
       if (qb.role !== 'QB' && this.off.QB && this.off.QB.state !== 'down') recs.push(this.off.QB);
-      var lockR = 2.6 + dist(qb, aim) * 0.04, best = null, bd = 1e9;
+      var assist = this.aimAssist && qb.ctl >= 0, self = this;
+      var lockR = assist ? 4.2 + dist(qb, aim) * 0.08 : 2.6 + dist(qb, aim) * 0.04;
+      var best = null, bd = 1e9, bs = 1e9;
       recs.forEach(function (r) {
         // also measure to where he's heading, so leading a receiver still locks on
         var d = Math.min(dist(r, aim), len(r.x + r.vx * 0.6 - aim.x, r.y + r.vy * 0.6 - aim.y));
-        if (d < bd) { bd = d; best = r; }
+        if (d >= lockR) return;
+        // aim assist: when two receivers are about equally close, take the more open one
+        var sc = d - (assist ? Math.min(6, self.openness(r)) * 0.15 : 0);
+        if (sc < bs) { bs = sc; bd = d; best = r; }
       });
-      if (best && bd < lockR) {
+      if (best) {
         rec = best; lock = true;
         ox = aim.x - rec.x; oy = aim.y - rec.y;
         var ol = len(ox, oy), om = 2.2;
@@ -1213,6 +1224,8 @@
     err *= 1 + Math.max(0, plan.power - 0.5) * 0.5;
     if (this.weather === 'rain' || this.weather === 'snow') err *= 1.12;
     if (opt.accMul) err *= opt.accMul;
+    // aim assist: a human throw at a locked-on receiver is pulled in toward him
+    if (this.aimAssist && qb.ctl >= 0 && plan.lock) err *= 0.6;
     var a = Math.random() * Math.PI * 2, m = err * Math.sqrt(Math.random());
     tx += Math.cos(a) * m; ty += Math.sin(a) * m;
     d = len(tx - qb.x, ty - qb.y);
