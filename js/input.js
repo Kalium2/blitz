@@ -25,6 +25,8 @@
     slots: [{}, {}],
     prev: [{}, {}],
     touch: { x: 0, y: 0, action: false, turbo: false, special: false, start: false, active: false },
+    // pointer on the field: sx/sy in CSS pixels; pressed/released/right are latched until pollMouse
+    mouse: { sx: 0, sy: 0, on: false, down: false, pressed: false, released: false, right: false, touch: false, offAfter: false },
     lastDevice: 'keyboard',
 
     init: function () {
@@ -41,7 +43,49 @@
         // stop Space/Enter from also "clicking" whatever button last had focus
         if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') e.preventDefault();
       });
-      window.addEventListener('blur', function () { self.keys = {}; self.latched = {}; });
+      window.addEventListener('blur', function () { self.keys = {}; self.latched = {}; self.mouse.down = false; self.mouse.on = false; });
+      this.initPointer();
+    },
+
+    // Mouse / pen / finger on the game canvas: aim and click to pass.
+    initPointer: function () {
+      var m = this.mouse, self = this;
+      var onField = function (e) { return e.target && e.target.tagName === 'CANVAS' && (e.target.id === 'game3d' || e.target.id === 'game'); };
+      var at = function (e) { m.sx = e.clientX; m.sy = e.clientY; m.touch = e.pointerType === 'touch'; };
+      window.addEventListener('pointermove', function (e) {
+        if (!onField(e) && !m.down) return;
+        at(e);
+        if (!m.touch || m.down) { m.on = true; self.lastDevice = 'mouse'; }
+      });
+      window.addEventListener('pointerdown', function (e) {
+        if (!onField(e)) return;
+        at(e); m.on = true; self.lastDevice = 'mouse';
+        if (e.button === 2) { m.right = true; return; }
+        if (e.button !== 0) return;
+        m.down = true; m.pressed = true; m.offAfter = false;
+        try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* not capturable */ }
+        e.preventDefault();
+      });
+      var up = function (e) {
+        if (e.button !== 0 && e.type === 'pointerup') return;
+        if (!m.down) return;
+        at(e); m.down = false; m.released = true;
+        // a finger has no hover: hide the reticle once the release is handled
+        if (m.touch) m.offAfter = true;
+      };
+      window.addEventListener('pointerup', up);
+      window.addEventListener('pointercancel', up);
+      document.addEventListener('mouseout', function (e) { if (!e.relatedTarget && !m.down) m.on = false; });
+      window.addEventListener('contextmenu', function (e) { if (onField(e)) e.preventDefault(); });
+    },
+
+    // Read the pointer once per frame; edges are cleared after reading.
+    pollMouse: function () {
+      var m = this.mouse;
+      var out = { sx: m.sx, sy: m.sy, on: m.on, down: m.down, pressed: m.pressed, released: m.released, right: m.right, touch: m.touch };
+      m.pressed = false; m.released = false; m.right = false;
+      if (m.offAfter) { m.on = false; m.offAfter = false; }
+      return out;
     },
 
     setMode: function (twoPlayer) { this.mode = twoPlayer ? 'two' : 'solo'; },
@@ -83,6 +127,8 @@
       var y = -ay + (b(12) ? 1 : 0) - (b(13) ? 1 : 0);
       var st = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), action: b(0), special: b(1) || b(3), turbo: b(2) || b(5) || b(7) || b(4) || b(6), start: b(9) };
       if (st.action || st.special || st.turbo || st.start || st.x || st.y) this.lastDevice = 'gamepad';
+      // aiming with the stick hands passing back from the pointer
+      if (st.x || st.y) this.mouse.on = false;
       return st;
     },
 

@@ -101,6 +101,17 @@
     return this.camToScreen(c);
   };
 
+  // CSS pixel -> point on the turf (inverse of project at z = 0).
+  R.groundAt = function (sx, sy) {
+    var a = (sx - this.cx) / this.f, q = -(sy - this.cy) / this.f, H = this.cam.H;
+    var den = this.sp - q * this.cp;
+    if (den <= 1e-4) return null;
+    var X = H * (this.cp + q * this.sp) / den, dd = X * this.cp + H * this.sp;
+    if (dd < NEAR) return null;
+    return { x: this.camX + X * this.cam.dir, y: this.camY + a * dd * this.cam.dir };
+  };
+  R.drawAim = function (g, ui) { if (FB.drawAim) FB.drawAim(this.ctx, this, g, ui); };
+
   // Clip a world polygon against the near plane, return screen points.
   R.polyScreen = function (pts) {
     var cs = pts.map(function (p) { return this.toCam(p[0], p[1], p[2] || 0); }, this);

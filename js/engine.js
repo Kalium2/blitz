@@ -551,6 +551,7 @@
   G.update = function (dt, inputs) {
     this.time += dt;
     inputs = inputs || [];
+    this.aimPlan = null;
     switch (this.phase) {
       case 'presnap': this.updatePresnap(dt, inputs); break;
       case 'live': this.updateLive(dt, inputs); break;
@@ -781,6 +782,16 @@
     if (this.playType === 'kickoff' && b.state === 'air' && c.team === this.poss) return;
     var hasBall = b.state === 'held' && b.holder === p;
     if (hasBall) {
+      if (this.canPass(p) && inp.aim) {
+        // point-and-click passing: the pass goes where the pointer is
+        var plan = this.planPass(p, inp.aim, inp.aim.power, null, true);
+        this.aimPlan = plan;
+        this.passTarget = plan.lock ? plan.rec : null;
+        if (inp.aim.release) this.throwTo(p, plan.rec, false, { plan: plan, accMul: inp.aim.accMul, perfect: inp.aim.perfect });
+        else if (inp.action) this.throwTo(p, plan.rec, !!inp.turbo, { plan: inp.turbo ? this.planPass(p, inp.aim, 1, null, false) : plan });
+        else if (inp.special) this.startSpin(p);
+        return;
+      }
       if (this.canPass(p)) {
         this.passTarget = this.pickTarget(p, inp);
         if (inp.action && this.passTarget) this.throwTo(p, this.passTarget, !!inp.turbo);
@@ -1085,21 +1096,95 @@
     this.emit('pitch', {});
   };
 
-  // bullet = turbo pass: a harder, flatter throw that is a little less accurate
-  G.throwTo = function (qb, rec, bullet) {
-    var b = this.ball;
-    var sp = clamp(17 + (qb.r.thp - 60) / 39 * 9, 15, 27);
-    if (bullet) sp += 5;
+  // Throw power runs from 0 (touch lob) through 0.5 (normal pass) to 1 (bullet).
+  function powerCurve(power, lob, mid, bullet) {
+    return power < 0.5 ? lob + (mid - lob) * power * 2 : mid + (bullet - mid) * (power - 0.5) * 2;
+  }
+
+  // Work out where a pass would go, with no randomness, so the aiming preview
+  // and the real throw agree. aim is a field point; with rec set, the throw is
+  // led to that receiver. Without it, a receiver near the aim point is locked
+  // on (and the pointer's offset from him places the ball), otherwise the ball
+  // goes to the spot and the nearest receiver runs for it.
+  G.planPass = function (qb, aim, power, rec, preview) {
+    power = clamp(power == null ? 0.5 : power, 0, 1);
+    var sp = clamp(17 + (qb.r.thp - 60) / 39 * 9, 15, 27) + powerCurve(power, -4, 0, 5);
     if (this.fire[qb.team]) sp += 2;
-    var tx = rec.x, ty = rec.y, t = 0;
-    for (var i = 0; i < 4; i++) {
-      var d0 = len(tx - qb.x, ty - qb.y);
-      t = d0 / sp + 0.1;
-      tx = rec.x + rec.vx * t * 0.92; ty = rec.y + rec.vy * t * 0.92;
+    var lock = !!rec, ox = 0, oy = 0;
+    if (!rec) {
+      var recs = this.eligible(qb.team).filter(function (r) { return r !== qb; });
+      if (qb.role !== 'QB' && this.off.QB && this.off.QB.state !== 'down') recs.push(this.off.QB);
+      var lockR = 2.6 + dist(qb, aim) * 0.04, best = null, bd = 1e9;
+      recs.forEach(function (r) {
+        // also measure to where he's heading, so leading a receiver still locks on
+        var d = Math.min(dist(r, aim), len(r.x + r.vx * 0.6 - aim.x, r.y + r.vy * 0.6 - aim.y));
+        if (d < bd) { bd = d; best = r; }
+      });
+      if (best && bd < lockR) {
+        rec = best; lock = true;
+        ox = aim.x - rec.x; oy = aim.y - rec.y;
+        var ol = len(ox, oy), om = 2.2;
+        if (ol > om) { ox *= om / ol; oy *= om / ol; }
+        ox *= 0.7; oy *= 0.7;
+      }
+    }
+    var tx, ty, t;
+    if (lock) {
+      tx = rec.x; ty = rec.y;
+      for (var i = 0; i < 4; i++) {
+        t = len(tx - qb.x, ty - qb.y) / sp + 0.1;
+        tx = rec.x + rec.vx * t * 0.92 + ox; ty = rec.y + rec.vy * t * 0.92 + oy;
+      }
+    } else {
+      tx = aim.x; ty = aim.y;
+      var nr = null, nd = 1e9;
+      this.eligible(qb.team).forEach(function (r) { if (r !== qb && dist(r, aim) < nd) { nd = dist(r, aim); nr = r; } });
+      rec = nr;
     }
     var d = len(tx - qb.x, ty - qb.y);
-    var maxR = 28 + qb.r.thp * 0.38;
-    if (d > maxR) { tx = qb.x + (tx - qb.x) * maxR / d; ty = qb.y + (ty - qb.y) * maxR / d; d = maxR; }
+    var maxR = 28 + qb.r.thp * 0.38, clamped = false;
+    if (d > maxR) { tx = qb.x + (tx - qb.x) * maxR / d; ty = qb.y + (ty - qb.y) * maxR / d; d = maxR; clamped = true; }
+    var plan = {
+      qb: qb, rec: rec, lock: lock, tx: tx, ty: ty, sp: sp, d: d, maxR: maxR, clamped: clamped, power: power,
+      T: d / sp + 0.08, peak: clamp(d * powerCurve(power, 0.14, 0.085, 0.035), 0.3, powerCurve(power, 8.5, 6.5, 2.5)),
+      bullet: power >= 0.8
+    };
+    if (preview) this.rateLane(plan);
+    return plan;
+  };
+
+  // Preview only: mark arc samples a defender could get a hand on (the same
+  // reach as laneCheck) and rate the catch window at the landing spot.
+  G.rateLane = function (plan) {
+    var qb = plan.qb, o = qb.team, N = 16, danger = [], self = this;
+    var defs = this.players.filter(function (d) { return d.team !== o && d.state === 'ok' && !d.eng; });
+    for (var i = 0; i <= N; i++) {
+      var s = i / N, x = qb.x + (plan.tx - qb.x) * s, y = qb.y + (plan.ty - qb.y) * s;
+      var z = 1.9 + (1.3 - 1.9) * s + plan.peak * 4 * s * (1 - s), ft = plan.T * s, hot = false;
+      if (s > 0.08 && s < 0.9 && z < 3.3) {
+        defs.forEach(function (d) {
+          if (len(d.x + d.vx * ft * 0.6 - x, d.y + d.vy * ft * 0.6 - y) < (z > 2.6 ? 1.1 : 1.4)) hot = true;
+        });
+      }
+      danger.push(hot);
+    }
+    var dD = 99;
+    defs.forEach(function (d) {
+      var k = Math.min(plan.T, 1.2) * 0.7;
+      dD = Math.min(dD, len(d.x + d.vx * k - plan.tx, d.y + d.vy * k - plan.ty));
+    });
+    plan.danger = danger;
+    plan.window = !plan.rec ? 'nobody' : dD > 3.2 ? 'open' : dD > 1.7 ? 'tight' : 'covered';
+  };
+
+  // bullet = turbo pass: a harder, flatter throw that is a little less accurate.
+  // opt.plan (from planPass) overrides the receiver lead; opt.accMul scales the
+  // throw's error (a perfectly timed release is much tighter).
+  G.throwTo = function (qb, rec, bullet, opt) {
+    var b = this.ball;
+    opt = opt || {};
+    var plan = opt.plan || this.planPass(qb, rec, bullet ? 1 : 0.5, rec, false);
+    var tx = plan.tx, ty = plan.ty, d = plan.d, sp = plan.sp;
     var err = 0.12 + (1 - (qb.r.tha - 40) / 60) * 0.55;
     err *= Math.max(0.5, d / 22);
     var pressure = this.pressureOn(qb);
@@ -1107,24 +1192,26 @@
     if (len(qb.vx, qb.vy) > 4) err *= 1.6;
     if (qb.role !== 'QB') err *= 1.6;
     if (this.fire[qb.team]) err *= 0.55;
-    if (bullet) err *= 1.25;
+    err *= 1 + Math.max(0, plan.power - 0.5) * 0.5;
     if (this.weather === 'rain' || this.weather === 'snow') err *= 1.12;
+    if (opt.accMul) err *= opt.accMul;
     var a = Math.random() * Math.PI * 2, m = err * Math.sqrt(Math.random());
     tx += Math.cos(a) * m; ty += Math.sin(a) * m;
     d = len(tx - qb.x, ty - qb.y);
     b.state = 'air'; b.kind = 'pass'; b.holder = null;
     b.sx = qb.x; b.sy = qb.y; b.sz = 1.9; b.tx = tx; b.ty = ty; b.tz = 1.3;
-    b.t = 0; b.T = d / sp + 0.08; b.peak = clamp(d * (bullet ? 0.035 : 0.085), 0.3, bullet ? 2.5 : 6.5);
-    b.bullet = !!bullet;
+    b.t = 0; b.T = d / sp + 0.08; b.peak = plan.peak;
+    b.bullet = plan.bullet;
     if (d > 12) { var wa = this.windAcc(); b.tx += 0.5 * wa.x * b.T * b.T; b.ty += 0.5 * wa.y * b.T * b.T; }
-    b.target = rec; b.thrower = qb;
+    b.target = plan.rec || null; b.thrower = qb;
     this.passThrown = true;
     this.passTarget = null;
+    this.aimPlan = null;
     this.log.passer = qb;
     this.stats.team[qb.team].att++;
     this.pstat(qb).att++;
     this.throwTime = this.playT;
-    this.emit('throw', { p: qb });
+    this.emit('throw', { p: qb, perfect: !!opt.perfect, power: plan.power });
   };
 
   // Sail the ball out of bounds: always incomplete.
