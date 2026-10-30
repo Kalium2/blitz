@@ -143,6 +143,103 @@
     label(ctx, n.t, x, y + r + 16, 12, n.c);
   }
 
+  // ------------------------------------------- receiver icons and play art
+  // One colour per receiver icon: 1 WR1, 2 WR2, 3 TE, 4 RB.
+  var REC_COLORS = ['#2ee6ff', '#ffd23a', '#3dff8b', '#ff6ad5'];
+  var SCRIMMAGE = { pass: true, screen: true, run: true };
+
+  function humanOffense(g) {
+    return g.ctl && g.ctl.some(function (c) { return c.team === g.poss; });
+  }
+
+  // Before the snap (and fading out just after it) the offense sees every
+  // route in its play, drawn on the turf like a playbook diagram.
+  function drawPlayArt(ctx, R, g) {
+    if (!SCRIMMAGE[g.playType] || !g.off || !humanOffense(g)) return;
+    var alpha = g.phase === 'presnap' ? 0.95 : g.phase === 'live' ? Math.max(0, 1 - g.playT / 0.7) : 0;
+    if (alpha <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    var roles = (FB.Game.prototype.RECEIVERS || []).slice();
+    roles.forEach(function (role, i) {
+      var p = g.off[role];
+      if (!p || !p.route || !p.route.length) return;
+      var run = g.playType === 'run' && role === 'RB';
+      var pts = [{ x: p.x, y: p.y }].concat(p.route);
+      if (g.phase === 'live') pts = [{ x: p.x, y: p.y }].concat(p.route.slice(p.ri));
+      var col = run ? '#ffffff' : p.blocker ? 'rgba(255,255,255,0.6)' : REC_COLORS[i];
+      var scr = pts.map(function (q) { return R.project(q.x, q.y, 0.05); });
+      if (scr.some(function (q) { return !q; }) || scr.length < 2) return;
+      var line = function () { ctx.beginPath(); scr.forEach(function (q, k) { if (k) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }); };
+      if (run) ctx.setLineDash([10, 7]);
+      line(); ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(10,10,24,0.8)'; ctx.stroke();
+      line(); ctx.lineWidth = 3.5; ctx.strokeStyle = col; ctx.stroke();
+      ctx.setLineDash([]);
+      // ending: an arrow if he keeps running, a T if he settles or blocks
+      var a = pts[pts.length - 2], z = pts[pts.length - 1];
+      var dx = z.x - a.x, dy = z.y - a.y, dl = Math.sqrt(dx * dx + dy * dy) || 1;
+      dx /= dl; dy /= dl;
+      var end = scr[scr.length - 1];
+      var cap = function (ax, ay, bx, by) {
+        var A = R.project(z.x + ax, z.y + ay, 0.05), B = R.project(z.x + bx, z.y + by, 0.05);
+        if (!A || !B) return null;
+        return [A, B];
+      };
+      var tips = (p.cont || run) ? [cap(-dx * 1.2 + dy * 0.9, -dy * 1.2 - dx * 0.9, 0, 0), cap(-dx * 1.2 - dy * 0.9, -dy * 1.2 + dx * 0.9, 0, 0)]
+        : [cap(dy * 1.1, -dx * 1.1, -dy * 1.1, dx * 1.1)];
+      tips.forEach(function (t) {
+        if (!t) return;
+        ctx.beginPath(); ctx.moveTo(t[0].x, t[0].y); ctx.lineTo(t[1].x, t[1].y);
+        ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(10,10,24,0.8)'; ctx.stroke();
+        ctx.lineWidth = 3.5; ctx.strokeStyle = col; ctx.stroke();
+      });
+      if (p.hotName && g.phase === 'presnap') label(ctx, p.hotName, end.x, end.y - 12, 11, col);
+    });
+    ctx.restore();
+  }
+
+  // Numbered icons over each receiver: press 1-4 (or click the icon) to set a
+  // hot route before the snap or to throw to him after it. When passing, the
+  // ring shows how open he is.
+  function drawReceiverIcons(ctx, R, g) {
+    FB.recBadges = [];
+    if (!g.off || !humanOffense(g) || !SCRIMMAGE[g.playType]) return;
+    var b = g.ball, live = g.phase === 'live';
+    var passing = live && b.state === 'held' && b.holder && b.holder.ctl >= 0 && g.canPass(b.holder);
+    var pre = g.phase === 'presnap' && g.playType !== 'run' && !g.cadence;
+    if (!passing && !pre) return;
+    ctx.save();
+    (FB.Game.prototype.RECEIVERS || []).forEach(function (role, i) {
+      var p = g.off[role];
+      if (!p || p.state === 'down' || (passing && p === b.holder)) return;
+      var s = R.project(p.x, p.y, 2.55 + (p.z || 0));
+      if (!s) return;
+      var ring = REC_COLORS[i];
+      if (passing) {
+        var o = g.openness(p);
+        ring = o > 3.2 ? '#3dff8b' : o > 1.7 ? '#ffd23a' : '#ff4040';
+      }
+      var r = 11, x = s.x, y = s.y - 14, M = 26, edge = 0;
+      // a receiver out of the camera's view gets his icon pinned to the screen edge, pointing at him
+      if (x < M) { x = M; edge = -1; } else if (x > R.W - M) { x = R.W - M; edge = 1; }
+      y = Math.max(M, Math.min(R.H - M, y));
+      if (edge) {
+        ctx.beginPath(); ctx.moveTo(x + edge * (r + 11), y); ctx.lineTo(x + edge * (r + 3), y - 7); ctx.lineTo(x + edge * (r + 3), y + 7); ctx.closePath();
+        ctx.lineWidth = 3; ctx.strokeStyle = '#0a0a18'; ctx.stroke(); ctx.fillStyle = ring; ctx.fill();
+      }
+      ctx.beginPath(); ctx.arc(x, y, r + 3, 0, TAU); ctx.fillStyle = '#0a0a18'; ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = passing ? '#141833' : REC_COLORS[i]; ctx.fill();
+      ctx.lineWidth = 3; ctx.strokeStyle = ring; ctx.stroke();
+      ctx.font = '13px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = passing ? '#ffffff' : '#0a0a18'; ctx.fillText(String(i + 1), x, y + 1);
+      if (pre && p.blocker && !p.hotName) label(ctx, 'BLOCK', x, y - 20, 9, 'rgba(255,255,255,0.75)');
+      else if (pre && edge && p.hotName) label(ctx, p.hotName, x, y + 22, 10, REC_COLORS[i]);
+      FB.recBadges.push({ n: i + 1, x: x, y: y, r: r + 6 });
+    });
+    ctx.restore();
+  }
+
   // The QB's snap count pops up over his helmet: HUT! HUT! HIKE!
   function drawCadence(ctx, R, g) {
     var cd = g.cadence, qb = cd && (cd.who || (g.off && g.off.QB));
@@ -164,6 +261,7 @@
   FB.drawAim = function (ctx, R, g, ui) {
     if (!ui) return;
     var time = g.time || 0, plan = ui.plan || g.aimPlan;
+    drawPlayArt(ctx, R, g);
     drawCadence(ctx, R, g);
     ctx.save();
     if (plan && ui.active) {
@@ -181,5 +279,6 @@
       label(ctx, 'PERFECT!', ui.fx, ui.fy - 38 - k * 18, 18, GOLD);
     }
     ctx.restore();
+    drawReceiverIcons(ctx, R, g);
   };
 })();

@@ -9,6 +9,7 @@
   var QLENS = [60, 120, 180, 240];
   var DIFFS = ['ROOKIE', 'PRO', 'ALL-PRO'];
   var GAME_SPEED = 0.88;
+  FB.GAME_SPEED = GAME_SPEED;
 
   var App = {
     mode: 'title',        // title | teams | game
@@ -182,6 +183,11 @@
         if (action === 'resume') this.setPaused(false);
         else if (action === 'howto') { UI.show('howto'); }
         else if (action === 'sound') { o.sound = !o.sound; Audio.setEnabled(o.sound); this.saveOpts(); this.applyOptLabels(); }
+        else if (action === 'timeout') {
+          var gg = this.game, mine = gg && gg.ctl.length ? gg.ctl[0].team : null;
+          this.setPaused(false);
+          if (gg && mine != null && !gg.callTimeout(mine)) this.renderer.banner('NO TIMEOUTS LEFT', { big: false, dur: 1.2, color: '#ff4d1f' });
+        }
         else if (action === 'quit') { this.setPaused(false); this.endGame(); this.toTitle(); }
       } else if (screen === 'final') {
         UI.hide('final');
@@ -201,6 +207,7 @@
 
     setPaused: function (on) {
       this.paused = on;
+      this.heldEdges = null;
       if (on) UI.show('pause'); else { UI.hide('pause'); UI.hide('howto'); }
     },
 
@@ -294,6 +301,7 @@
       var simDt = dt * GAME_SPEED;
       if (this.hitstop > 0) { this.hitstop -= dt; simDt = 0; }
       else if (this.slow.t > 0) { this.slow.t -= dt; simDt *= this.slow.scale; }
+      var R0 = this.renderer;
       if (!blocked) {
         // fixed-step simulation
         this.acc += simDt;
@@ -302,6 +310,15 @@
         // edges only count once; the pointer aim carries over without its release
         var noEdges = function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false, aim: i.aim ? { x: i.aim.x, y: i.aim.y, power: i.aim.power } : null }; };
         if (menuOwnedInput && gameInputs.length) gameInputs = gameInputs.map(function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false }; });
+        // A press on a frame where no sim step runs (fast monitors, the slowed
+        // game speed, hit-stop) is held over until a step does run, so taps
+        // like the kick meter are never dropped.
+        var held = this.heldEdges || [];
+        if (gameInputs.length) gameInputs = gameInputs.map(function (i, k) {
+          var e = held[k];
+          if (!e || menuOwnedInput) return i;
+          return Object.assign({}, i, { action: i.action || e.action, special: i.special || e.special, rec: i.rec || e.rec });
+        });
         if (this.renderer.heading && g.phase === 'live') g.camHeading = this.renderer.heading(); else g.camHeading = null;
         while (this.acc >= h && n < 6) {
           g.cpuStep(h);
@@ -309,6 +326,7 @@
           if (gameInputs.length) gameInputs = gameInputs.map(noEdges);
           this.acc -= h; n++;
         }
+        this.heldEdges = n > 0 ? null : gameInputs.map(function (i) { return (i.action || i.special || i.rec) ? { action: i.action, special: i.special, rec: i.rec } : null; });
         // a release that landed on a frame with no sim step waits for the next one
         if (n > 0 && this.aim) this.aim.pending = null;
         if (n === 6) this.acc = 0;
@@ -321,6 +339,12 @@
             self3.prevTurbo[i] = !!(inp && inp.turbo);
           });
           this.footsteps(g, simDt);
+          // timeouts: T / numpad minus / gamepad Back
+          inputs.forEach(function (inp, i) {
+            if (!inp || !inp.timeout || menuOwnedInput) return;
+            var cc = null; g.ctl.forEach(function (k) { if (k.slot === i) cc = k; });
+            if (cc && !g.callTimeout(cc.team) && g.timeouts[cc.team] <= 0) R0.banner('NO TIMEOUTS LEFT', { big: false, dur: 1.2, color: '#ff4d1f' });
+          });
           this.crackleT = (this.crackleT || 0) - dt;
           if ((g.fire[0] || g.fire[1]) && g.phase === 'live' && this.crackleT <= 0) { Audio.play('crackle'); this.crackleT = 0.35; }
           this.record(g);
@@ -358,6 +382,10 @@
       var ui = { active: false, flash: A.flash, fx: A.fx, fy: A.fy };
       this.aimUI = ui;
       this.setAimCursor(canAim);
+      // clicking a receiver icon = pressing his number (hot route before the snap, pass after it)
+      var badge = null;
+      if (!menu && m.pressed) (FB.recBadges || []).forEach(function (bd) { if (Math.hypot(m.sx - bd.x, m.sy - bd.y) <= bd.r) badge = bd; });
+      if (badge) { inputs[0].rec = badge.n; m.pressed = false; }
       if (!canAim) {
         A.charging = false; A.pending = null;
         // elsewhere a click is the Action button (snap, switch, dive, spin) and right-click is Special
@@ -463,12 +491,12 @@
       if (g.phase === 'presnap') {
         if (g.playType === 'kickoff' && g.koMeter && !g.koMeter.set && c.team === g.kickTeam) return A + ': SET KICK POWER  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '');
         if (g.playType === 'kickoff') return c.team === g.kickTeam ? A + ': KICK  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '') : null;
-        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE';
+        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE' + (g.playType !== 'run' && !pad && !touch ? '  \u2022  1-4: HOT ROUTE' : '');
         return A + ': SWITCH DEFENDER  \u2022  ' + S + ': AUDIBLE';
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
-          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  HOLD + RELEASE ON GOLD: PERFECT THROW  \u2022  RIGHT-CLICK: CANCEL';
+          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  1-4: THROW TO ICON  \u2022  HOLD + RELEASE ON GOLD: PERFECT  \u2022  RIGHT-CLICK: CANCEL';
           if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
@@ -478,6 +506,7 @@
         if (b.state === 'held' && b.holder && b.holder.team !== c.team) return A + ': DIVE / SWITCH  •  ' + T + ': TURBO';
       }
       if (g.phase === 'dead') return A + ': LATE HIT!';
+      if (g.phase === 'break' && g.halftime && g.halftime.t > 1.5) return A + ': SKIP HALFTIME SHOW';
       return null;
     },
 
@@ -563,6 +592,17 @@
             break;
           case 'tipped': R.banner(d.batted ? 'BATTED DOWN!' : 'TIPPED!', { big: false, dur: 1.2, color: '#2ee6ff' }); if (sfx) Audio.play('catch'); break;
           case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
+          case 'hotroute': if (sfx) Audio.play('switch'); break;
+          case 'timeoutcalled': if (!demo) R.banner('TIMEOUT CALLED', { big: false, sub: 'AFTER THE PLAY', dur: 1.2, color: '#2ee6ff' }); break;
+          case 'timeout':
+            R.banner('TIMEOUT', { sub: g.teams[d.team].name.toUpperCase() + '  \u2022  ' + d.left + ' LEFT', dur: 1.8, color: '#2ee6ff' });
+            if (sfx) Audio.play('whistle');
+            break;
+          case 'twomin':
+            R.banner(d.at >= 120 ? 'TWO-MINUTE WARNING' : FB.fmtClock(d.at) + ' WARNING', { dur: 2.0, color: '#ffd23a' });
+            if (sfx) { Audio.play('whistleLong'); Audio.roar(0.3, 2); }
+            break;
+          case 'oobcatch': R.banner('OUT OF BOUNDS', { big: false, sub: 'NO CATCH', dur: 1.4, color: '#ff4d1f' }); break;
           case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.call('audible'); } break;
           case 'onsidecall': if (sfx) Audio.play('switch'); break;
           case 'onside': R.banner('ONSIDE KICK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) Audio.call('onside'); break;
@@ -647,8 +687,11 @@
           case 'downs': R.banner('TURNOVER ON DOWNS', { big: false, dur: 1.8 }); break;
           case 'touchback': R.banner('TOUCHBACK', { big: false, dur: 1.3, color: '#9aa3c7' }); break;
           case 'punt': R.banner('PUNT', { big: false, dur: 1.2 }); break;
-          case 'kickoff': if (!demo && g.time > 1) R.banner('KICKOFF', { big: false, dur: 1.2 }); break;
-          case 'half': R.banner('HALFTIME', { dur: 2.4 }); if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); } break;
+          case 'kickoff': Audio.stopHalftime(); if (!demo && g.time > 1) R.banner('KICKOFF', { big: false, dur: 1.2 }); break;
+          case 'half':
+            R.banner('HALFTIME', { sub: g.teams[0].name.toUpperCase() + ' CHEERLEADERS', dur: 2.6 });
+            if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); Audio.halftimeShow(g.halftime ? g.halftime.len / GAME_SPEED : 10); }
+            break;
           case 'quarter': R.banner(d.ot ? 'OVERTIME' : 'END OF ' + FB.ordinal(d.q - 1) + ' QUARTER', { dur: 2.2, big: !!d.ot }); if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); } break;
           case 'final':
             R.banner('FINAL', { dur: 2.6 });

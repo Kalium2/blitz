@@ -398,6 +398,48 @@
       tick();
     },
 
+    // Halftime show: an original drumline groove with a brassy stab riff (D minor).
+    halftimeShow: function (secs) {
+      this.stopHalftime();
+      if (!this.ctx || !this.enabled) return;
+      var self = this, c = this.ctx, step = 60 / 132 / 2, t0 = c.currentTime + 0.05, end = t0 + secs;
+      var hz = function (m) { return 440 * Math.pow(2, (m - 69) / 12); };
+      var RIFF = [62, 0, 65, 62, 0, 69, 0, 67, 65, 0, 62, 0, 60, 0, 62, 0];
+      var BASS = [38, 38, 50, 38, 41, 41, 53, 41];
+      var stab = function (m, t, dur, vol) {
+        [0, 7, 12].forEach(function (iv, k) {
+          var o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+          o.type = 'sawtooth'; o.frequency.value = hz(m + iv) * (k ? 1.003 : 1);
+          f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(900, t + dur);
+          g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          o.connect(f); f.connect(g); g.connect(self.musicBus); o.start(t); o.stop(t + dur + 0.02);
+        });
+      };
+      var n = 0, h = { timer: null };
+      this.ht = h;
+      var tick = function () {
+        if (self.ht !== h) return;
+        var t;
+        while ((t = t0 + n * step) < Math.min(end, c.currentTime + 0.3)) {
+          var pos = n % 8, bar = Math.floor(n / 8);
+          // marching snare rolls, quads and bass drum
+          if (pos === 2 || pos === 6) self.noise(0.14, 1900, 0.42, 'bandpass', t - c.currentTime, self.musicBus, 1.2);
+          else if (pos % 2 === 1) self.noise(0.05, 2600, 0.16, 'bandpass', t - c.currentTime, self.musicBus, 1.5);
+          if (pos === 0 || pos === 3 || pos === 4) self.tone('sine', 120, 42, 0.2, 0.8, t - c.currentTime, self.musicBus);
+          if (pos === 6 && bar % 2) self.noise(0.04, 1400, 0.3, 'bandpass', t - c.currentTime + step / 2, self.musicBus, 2);
+          self.tone('triangle', hz(BASS[pos]), 0, step * 0.9, 0.18, t - c.currentTime, self.musicBus);
+          var r = RIFF[n % 16];
+          if (r && bar >= 2) stab(r, t, step * 1.6, 0.05);
+          n++;
+        }
+        if (t0 + n * step < end) h.timer = setTimeout(tick, 80);
+        else { self.ht = null; self.roar(0.6, 2); }
+      };
+      tick();
+      this.roar(0.5, secs);
+    },
+    stopHalftime: function () { if (this.ht) { clearTimeout(this.ht.timer); this.ht = null; } },
+
     stopMusic: function () {
       this.wantMusic = false;
       if (this.music) { clearTimeout(this.music.timer); this.music = null; }
