@@ -62,6 +62,25 @@
         document.body.classList.add('touch');
         Input.initTouch(document.getElementById('touch'));
       }
+      // click / tap a receiver to throw to him (hold turbo for a bullet)
+      window.addEventListener('pointerdown', function (e) {
+        if (self.mode !== 'game' || !self.game || self.paused || UI.ps || UI.top()) return;
+        var t = e.target;
+        if (t && t.closest && (t.closest('#touch .stick') || t.closest('[data-btn]') || t.closest('.screen.active'))) return;
+        var g = self.game, opts = g.passOptions(0);
+        if (!opts.length || !self.renderer.project) return;
+        var best = null, bd = 1e9;
+        opts.forEach(function (r) {
+          var sp = self.renderer.project(r.x, r.y, 1.2);
+          if (!sp) return;
+          var d = Math.hypot(sp.x - e.clientX, sp.y - e.clientY);
+          if (d < bd) { bd = d; best = r; }
+        });
+        if (best && bd < Math.max(90, window.innerWidth * 0.08)) {
+          var bullet = !!(Input.keys.ShiftLeft || Input.keys.ShiftRight || Input.keys.KeyK || Input.touch.turbo);
+          if (g.humanThrowAt(0, best, bullet)) e.preventDefault();
+        }
+      });
       // unlock audio on first interaction
       var unlock = function () { Audio.init(); if (self.mode !== 'game') Audio.startMusic(); };
       window.addEventListener('keydown', unlock, { once: true });
@@ -384,7 +403,7 @@
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
-          if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return 'AIM + ' + A + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
+          if (g.canPass(c.pl)) return (touch ? 'TAP A RECEIVER' : 'CLICK A RECEIVER OR AIM + ' + A) + ': PASS  \u2022  HOLD ' + T + ': BULLET';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
         if (b.state === 'air' && b.kind === 'pass') return S + ': JUMP FOR THE BALL';
@@ -488,7 +507,9 @@
           case 'lateral': R.banner('LATERAL!', { big: false, dur: 1.0 }); if (sfx) { Audio.play('throw'); Audio.call('lateral'); } break;
           case 'stiff': if (sfx) { Audio.play('hit'); if (Math.random() < 0.4) Audio.call('stiff'); } if (!demo && Math.random() < 0.35) R.banner('STIFF ARM!', { big: false, dur: 0.9 }); break;
           case 'snap': if (sfx) { Audio.play('snap'); if (Math.random() < 0.5) Audio.call('hut'); } break;
-          case 'throw': if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw'); if (R.notify) R.notify('throw', d); break;
+          case 'windup': if (R.notify) R.notify('throw', d); break;
+          case 'throw': if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw'); break;
+          case 'swim': if (sfx) Audio.play('spin'); break;
           case 'kick': if (sfx) Audio.play('kick'); break;
           case 'catch':
             if (sfx) { Audio.play('catch'); Audio.roar(0.25, 1.4); }

@@ -761,6 +761,8 @@
       self.movePlayer(p, dt);
     });
 
+    this.updateWindups(dt);
+    if (this.phase !== 'live') return;
     this.updateBlocks(dt);
     this.separate();
     if (!this.crossedLOS && b.state === 'held' && b.holder && b.holder.team === this.poss && this.playType !== 'kickoff' && this.relX(b.holder.x) > 0.5) this.crossedLOS = true;
@@ -783,7 +785,7 @@
     if (hasBall) {
       if (this.canPass(p)) {
         this.passTarget = this.pickTarget(p, inp);
-        if (inp.action && this.passTarget) this.throwTo(p, this.passTarget, !!inp.turbo);
+        if (inp.action && this.passTarget && !p.windup) this.startThrow(p, this.passTarget, !!inp.turbo);
         else if (inp.special) this.startSpin(p);
         return;
       }
@@ -797,6 +799,12 @@
       }
     }
     var teamHasBall = (b.state === 'held' && b.holder && b.holder.team === c.team);
+    if (!teamHasBall && inp.action && p.eng) {
+      this.release(p.eng, p);
+      p.immune = 1.3;
+      this.emit('swim', { p: p });
+      return;
+    }
     if (!teamHasBall && inp.action) {
       var carrier = b.state === 'held' ? b.holder : null;
       if (carrier && dist(p, carrier) < 3.4 && p.state === 'ok' && !p.eng) {
@@ -981,8 +989,8 @@
         var c = ps[j];
         if (c.state === 'down' || a.eng === c) continue;
         var dx = c.x - a.x, dy = c.y - a.y, d = len(dx, dy);
-        if (d < 0.7 && d > 0.0001) {
-          var push = (0.7 - d) * 0.5;
+        if (d < 0.9 && d > 0.0001) {
+          var push = (0.9 - d) * 0.5;
           dx /= d; dy /= d;
           a.x -= dx * push; a.y -= dy * push;
           c.x += dx * push; c.y += dy * push;
@@ -1004,7 +1012,7 @@
       // blocker stays between defender and the ball
       var tgt = carrier || self.off && self.off.QB || b;
       var dx = tgt.x - d.x, dy = tgt.y - d.y, dl = len(dx, dy) || 1;
-      p.x = d.x + dx / dl * 0.85; p.y = d.y + dy / dl * 0.85;
+      p.x = d.x + dx / dl * 1.0; p.y = d.y + dy / dl * 1.0;
       if (p.engT <= 0 || d.state !== 'ok' || p.state !== 'ok' || carrier === p) {
         self.release(p, d);
       }
@@ -1019,7 +1027,7 @@
         if (d.team === bl.team || d.eng || d.state !== 'ok') continue;
         if (d.immune > 0 && (d.immuneTo === bl || d.ctl >= 0)) continue;
         // the defender you control can't be picked up once he's at the ball carrier
-        if (d.ctl >= 0 && carrier && dist(d, carrier) < 2.4) continue;
+        if (d.ctl >= 0 && carrier && dist(d, carrier) < 3.0) continue;
         if (dist(bl, d) < 1.05) { self.engage(bl, d); break; }
       }
     });
@@ -1127,6 +1135,49 @@
     this.emit('throw', { p: qb });
   };
 
+  // Click / tap to pass: the human throws to the receiver they clicked.
+  G.humanThrowAt = function (slot, rec, bullet) {
+    var c = null;
+    this.ctl.forEach(function (x) { if (x.slot === slot) c = x; });
+    if (!c || this.phase !== 'live') return false;
+    var qb = c.pl, b = this.ball;
+    if (!qb || b.state !== 'held' || b.holder !== qb || !this.canPass(qb) || qb.windup) return false;
+    if (!rec || rec === qb || rec.team !== qb.team) return false;
+    this.passTarget = rec;
+    this.startThrow(qb, rec, bullet);
+    return true;
+  };
+  // Teammates a human passer could throw to right now (for click targeting).
+  G.passOptions = function (slot) {
+    var c = null, self = this;
+    this.ctl.forEach(function (x) { if (x.slot === slot) c = x; });
+    if (!c || this.phase !== 'live' || !c.pl) return [];
+    var qb = c.pl, b = this.ball;
+    if (b.state !== 'held' || b.holder !== qb || !this.canPass(qb) || qb.windup) return [];
+    var recs = this.eligible(qb.team).filter(function (r) { return r !== qb; });
+    if (qb.role !== 'QB' && this.off.QB && this.off.QB.state !== 'down') recs.push(this.off.QB);
+    return recs;
+  };
+
+  // Wind up, then release. A rusher who arrives during the windup gets the sack.
+  var WINDUP = 0.22;
+  G.startThrow = function (qb, rec, bullet) {
+    if (qb.windup) return;
+    qb.windup = { rec: rec, bullet: !!bullet, t: WINDUP };
+    this.emit('windup', { p: qb });
+  };
+  G.updateWindups = function (dt) {
+    var b = this.ball;
+    var qb = b.state === 'held' ? b.holder : null;
+    if (!qb || !qb.windup) return;
+    if (qb.state !== 'ok') { qb.windup = null; return; }
+    qb.windup.t -= dt;
+    if (qb.windup.t <= 0) {
+      var w = qb.windup; qb.windup = null;
+      if (w.rec && w.rec.x != null) this.throwTo(qb, w.rec, w.bullet);
+    }
+  };
+
   // Sail the ball out of bounds: always incomplete.
   G.throwAway = function (qb) {
     var side = qb.y < MID ? -4 : FW + 4;
@@ -1136,6 +1187,24 @@
     var d = len(this.ball.tx - qb.x, this.ball.ty - qb.y);
     this.ball.T = d / 20 + 0.1;
     this.ball.target = null;
+  };
+
+  // Distance to the nearest unblocked rusher the QB can actually see (in
+  // front of him). He notices it only some of the time (better QBs and
+  // tougher CPU skill notice more often); blind-side rushers get home.
+  G.visiblePressure = function (qb) {
+    var m = 99, self = this, dir = this.dir;
+    this.players.forEach(function (d) {
+      if (d.team === qb.team || d.state !== 'ok' || d.eng) return;
+      var dx = d.x - qb.x, dy = d.y - qb.y, dd = len(dx, dy) || 1;
+      if ((dx * dir) / dd < -0.2) return; // behind him: blind side
+      if (dd < m) m = dd;
+    });
+    if (m < 3) {
+      if (qb._poise == null) qb._poise = Math.random() < ([0.55, 0.75, 0.88][this.diff] || 0.75) * (0.75 + qb.r.tha / 400);
+      if (!qb._poise) return 99;
+    }
+    return m;
   };
 
   G.pressureOn = function (qb) {
@@ -1265,8 +1334,24 @@
     });
     var jumpBonus = function (p) { return (self.time - p.jumpAt) < 0.75 ? 0.13 : 0; };
     var reach = function (p) { return 1.7 + ((self.time - p.jumpAt) < 0.75 ? 0.4 : 0); };
+    var reachO = function (p) { return reach(p) + (p.ctl >= 0 ? 0.5 : 0); };
     var defIn = bestD && dD < reach(bestD) * 0.62;
-    var offIn = bestO && dO < reach(bestO);
+    var offIn = bestO && dO < reachO(bestO);
+    // receiver who is at the spot about as well as the defender has priority
+    if (offIn && (!defIn || dO <= dD + 0.35)) {
+      var closeN = 0;
+      this.players.forEach(function (p) { if (p.team !== o && p.state === 'ok' && dist(p, bestO) < 1.3) closeN++; });
+      var pc0 = 0.86 + (bestO.r.cth - 60) / 160 + jumpBonus(bestO) - closeN * 0.12 - (dO > 1.3 ? 0.1 : 0) + (bestO.ctl >= 0 ? 0.08 : 0);
+      if (this.fire[o]) pc0 += 0.1;
+      if (this.weather === 'rain' || this.weather === 'snow') pc0 -= 0.06;
+      if (this.powerOf(bestO) === 'hands') pc0 += 0.2;
+      if (b.bullet) pc0 -= 0.04;
+      if (Math.random() < clamp(pc0, 0.15, 0.98)) { this.complete(bestO); return; }
+      // bobbled: a defender right there can still snatch it
+      if (defIn && Math.random() < 0.15) { this.intercept(bestD); return; }
+      this.incomplete(defIn ? bestD : null);
+      return;
+    }
     if (defIn && (!offIn || dD < dO)) {
       var pInt = 0.12 + (bestD.r.cth - 60) / 220 + (bestD.r.cov - 75) / 350 + jumpBonus(bestD);
       if (this.fire[bestD.team]) pInt += 0.08;
@@ -1500,9 +1585,10 @@
 
   G.thinkQB = function (p) {
     var self = this;
+    if (p.windup) { p.want.x = 0; p.want.y = 0; return; }
     var drop = this.qbDrop;
     var t = this.playT;
-    var pressure = this.pressureOn(p);
+    var pressure = this.visiblePressure(p);
     var dropped = dist(p, drop) < 0.8 || t > 1.1;
     if (!dropped) this.goTo(p, drop.x, drop.y, false, 1);
     // read progression
@@ -1527,7 +1613,7 @@
       else if (pressure < 2.0 && t > 0.6 && bestOpen > 1.4) throwIt = true;
     }
     if (throwIt && bestOpen < 1.6 && t > 3.4) { this.throwAway(p); return; }
-    if (throwIt) { this.throwTo(p, best, bestOpen < 2.6 && dist(p, best) < 16 && Math.random() < 0.6); return; }
+    if (throwIt) { this.startThrow(p, best, bestOpen < 2.6 && dist(p, best) < 16 && Math.random() < 0.6); return; }
     if (pressure < 3.2 && dropped) {
       // escape pressure
       var ex = 0, ey = 0;
