@@ -12,10 +12,13 @@
     // one player: everything works
     solo: {
       up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
-      action: ['Space', 'KeyJ'], turbo: ['ShiftLeft', 'ShiftRight', 'KeyK'], special: ['KeyL', 'KeyE'], start: ['Escape', 'Enter', 'KeyP']
+      action: ['Space', 'KeyJ'], turbo: ['ShiftLeft', 'ShiftRight', 'KeyK'], special: ['KeyL', 'KeyE'], start: ['Escape', 'Enter', 'KeyP'],
+      rec: [['Digit1', 'Numpad1'], ['Digit2', 'Numpad2'], ['Digit3', 'Numpad3'], ['Digit4', 'Numpad4']]
     },
-    p1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['Space'], turbo: ['ShiftLeft'], special: ['KeyE'], start: ['Escape'] },
-    p2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], action: ['Numpad0', 'Slash'], turbo: ['NumpadDecimal', 'Period'], special: ['NumpadEnter', 'Comma'], start: ['Enter'] }
+    p1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['Space'], turbo: ['ShiftLeft'], special: ['KeyE'], start: ['Escape'],
+      rec: [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4']] },
+    p2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], action: ['Numpad0', 'Slash'], turbo: ['NumpadDecimal', 'Period'], special: ['NumpadEnter', 'Comma'], start: ['Enter'],
+      rec: [['Numpad1'], ['Numpad2'], ['Numpad3'], ['Numpad4']] }
   };
 
   var Input = {
@@ -96,6 +99,7 @@
       ['solo', 'p1', 'p2'].forEach(function (m) {
         var map = KEYMAPS[m];
         ['action', 'turbo', 'special', 'start'].forEach(function (b) { map[b].forEach(function (c) { if (k[c]) held = true; }); });
+        map.rec.forEach(function (keys) { keys.forEach(function (c) { if (k[c]) held = true; }); });
       });
       var pads = navigator.getGamepads ? navigator.getGamepads() : [];
       for (var i = 0; i < pads.length; i++) if (pads[i] && pads[i].connected && pads[i].buttons.some(function (b) { return b.pressed; })) held = true;
@@ -109,7 +113,9 @@
       return {
         x: (any(map.right) ? 1 : 0) - (any(map.left) ? 1 : 0),
         y: (any(map.up) ? 1 : 0) - (any(map.down) ? 1 : 0),
-        action: any(map.action), turbo: any(map.turbo), special: any(map.special), start: any(map.start)
+        action: any(map.action), turbo: any(map.turbo), special: any(map.special), start: any(map.start),
+        // receiver icon key held (1-4), 0 for none
+        rec: map.rec ? map.rec.reduce(function (r, keys, i) { return r || (any(keys) ? i + 1 : 0); }, 0) : 0
       };
     },
 
@@ -136,7 +142,8 @@
       if (!b) return a;
       return {
         x: Math.max(-1, Math.min(1, a.x + b.x)), y: Math.max(-1, Math.min(1, a.y + b.y)),
-        action: a.action || b.action, turbo: a.turbo || b.turbo, special: a.special || b.special, start: a.start || b.start
+        action: a.action || b.action, turbo: a.turbo || b.turbo, special: a.special || b.special, start: a.start || b.start,
+        rec: a.rec || b.rec || 0
       };
     },
 
@@ -159,6 +166,7 @@
         out[i] = {
           x: r.x, y: r.y, turbo: r.turbo, actionHeld: r.action,
           action: r.action && !p.action, special: r.special && !p.special, start: r.start && !p.start,
+          rec: r.rec && r.rec !== p.rec ? r.rec : 0,
           // menu navigation edges
           navX: (r.x > 0.5 && !(p.x > 0.5)) ? 1 : (r.x < -0.5 && !(p.x < -0.5)) ? -1 : 0,
           navY: (r.y > 0.5 && !(p.y > 0.5)) ? 1 : (r.y < -0.5 && !(p.y < -0.5)) ? -1 : 0,
@@ -167,7 +175,7 @@
         this.prev[i] = r;
         // a tap that started and ended between polls still registered once; make sure
         // the next poll sees the release so the following tap is a fresh edge
-        if (!this.keysHeld(r)) this.prev[i] = { x: r.x, y: r.y, action: false, turbo: false, special: false, start: false };
+        if (!this.keysHeld(r)) this.prev[i] = { x: r.x, y: r.y, action: false, turbo: false, special: false, start: false, rec: 0 };
       }
       this.latched = {};
       return out;

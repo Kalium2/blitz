@@ -201,6 +201,7 @@
 
     setPaused: function (on) {
       this.paused = on;
+      this.heldEdges = null;
       if (on) UI.show('pause'); else { UI.hide('pause'); UI.hide('howto'); }
     },
 
@@ -302,6 +303,15 @@
         // edges only count once; the pointer aim carries over without its release
         var noEdges = function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false, aim: i.aim ? { x: i.aim.x, y: i.aim.y, power: i.aim.power } : null }; };
         if (menuOwnedInput && gameInputs.length) gameInputs = gameInputs.map(function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false }; });
+        // A press on a frame where no sim step runs (fast monitors, the slowed
+        // game speed, hit-stop) is held over until a step does run, so taps
+        // like the kick meter are never dropped.
+        var held = this.heldEdges || [];
+        if (gameInputs.length) gameInputs = gameInputs.map(function (i, k) {
+          var e = held[k];
+          if (!e || menuOwnedInput) return i;
+          return Object.assign({}, i, { action: i.action || e.action, special: i.special || e.special, rec: i.rec || e.rec });
+        });
         if (this.renderer.heading && g.phase === 'live') g.camHeading = this.renderer.heading(); else g.camHeading = null;
         while (this.acc >= h && n < 6) {
           g.cpuStep(h);
@@ -309,6 +319,7 @@
           if (gameInputs.length) gameInputs = gameInputs.map(noEdges);
           this.acc -= h; n++;
         }
+        this.heldEdges = n > 0 ? null : gameInputs.map(function (i) { return (i.action || i.special || i.rec) ? { action: i.action, special: i.special, rec: i.rec } : null; });
         // a release that landed on a frame with no sim step waits for the next one
         if (n > 0 && this.aim) this.aim.pending = null;
         if (n === 6) this.acc = 0;
@@ -358,6 +369,10 @@
       var ui = { active: false, flash: A.flash, fx: A.fx, fy: A.fy };
       this.aimUI = ui;
       this.setAimCursor(canAim);
+      // clicking a receiver icon = pressing his number (hot route before the snap, pass after it)
+      var badge = null;
+      if (!menu && m.pressed) (FB.recBadges || []).forEach(function (bd) { if (Math.hypot(m.sx - bd.x, m.sy - bd.y) <= bd.r) badge = bd; });
+      if (badge) { inputs[0].rec = badge.n; m.pressed = false; }
       if (!canAim) {
         A.charging = false; A.pending = null;
         // elsewhere a click is the Action button (snap, switch, dive, spin) and right-click is Special
@@ -463,12 +478,12 @@
       if (g.phase === 'presnap') {
         if (g.playType === 'kickoff' && g.koMeter && !g.koMeter.set && c.team === g.kickTeam) return A + ': SET KICK POWER  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '');
         if (g.playType === 'kickoff') return c.team === g.kickTeam ? A + ': KICK  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '') : null;
-        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE';
+        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE' + (g.playType !== 'run' && !pad && !touch ? '  \u2022  1-4: HOT ROUTE' : '');
         return A + ': SWITCH DEFENDER  \u2022  ' + S + ': AUDIBLE';
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
-          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  HOLD + RELEASE ON GOLD: PERFECT THROW  \u2022  RIGHT-CLICK: CANCEL';
+          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  1-4: THROW TO ICON  \u2022  HOLD + RELEASE ON GOLD: PERFECT  \u2022  RIGHT-CLICK: CANCEL';
           if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
@@ -563,6 +578,8 @@
             break;
           case 'tipped': R.banner(d.batted ? 'BATTED DOWN!' : 'TIPPED!', { big: false, dur: 1.2, color: '#2ee6ff' }); if (sfx) Audio.play('catch'); break;
           case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
+          case 'hotroute': if (sfx) Audio.play('switch'); break;
+          case 'oobcatch': R.banner('OUT OF BOUNDS', { big: false, sub: 'NO CATCH', dur: 1.4, color: '#ff4d1f' }); break;
           case 'audible': R.banner('AUDIBLE!', { big: false, sub: d.name, dur: 1.3, color: '#2ee6ff' }); if (sfx) { Audio.play('switch'); Audio.call('audible'); } break;
           case 'onsidecall': if (sfx) Audio.play('switch'); break;
           case 'onside': R.banner('ONSIDE KICK!', { dur: 1.5, color: '#ff4d1f' }); if (sfx) Audio.call('onside'); break;

@@ -34,7 +34,7 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 | Special (hurdle, jump for ball) | E / L | E | Num Enter or `,` | B / Y |
 | Pause | Esc / P | Esc | Enter | Start |
 
-To pass with the mouse, point at a receiver (or any spot) and click; hold and release on the gold band of the power ring for a perfect throw, right-click to cancel. Elsewhere a left click works as Action (snap, switch, dive) and a right click as Special. With a keyboard or gamepad, point the stick at a receiver and press Action; with the stick centered, the ball goes to the most open receiver, marked by the pulsing ring.
+Before the snap on a pass play, press **1-4** (WR1, WR2, TE, RB) or click a receiver's numbered icon to cycle his **hot route** (GO, SLANT, OUT, CURL, IN, FLAT, then back to the called route); the play's routes are drawn on the field until the snap. After the snap, press a receiver's number (or click his icon) to throw to him; the icon's ring shows how open he is. Player 2 uses numpad 1-4. To pass with the mouse, point at a receiver (or any spot) and click; hold and release on the gold band of the power ring for a perfect throw, right-click to cancel. Elsewhere a left click works as Action (snap, switch, dive) and a right click as Special. With a keyboard or gamepad, point the stick at a receiver and press Action; with the stick centered, the ball goes to the most open receiver, marked by the pulsing ring.
 
 ## Player ratings: template and fantasy stats
 

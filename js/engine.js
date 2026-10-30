@@ -22,6 +22,8 @@
   function len(x, y) { return Math.sqrt(x * x + y * y); }
   function dist(a, b) { return len(a.x - b.x, a.y - b.y); }
   function dirOf(t) { return t === 0 ? 1 : -1; }
+  // inside the sidelines and end lines (the end zones run to -10 and 110)
+  function inBounds(p) { return p.y >= 0 && p.y <= FW && p.x >= -10 && p.x <= 110; }
   function goalOf(t) { return t === 0 ? 100 : 0; }   // goal line team t attacks
   function ownGoal(t) { return t === 0 ? 0 : 100; }  // goal line team t defends
 
@@ -619,6 +621,7 @@
       }
       if (inp.special && !self.cadence) { self.audible(c.team === self.poss ? 'off' : 'def'); return; }
       if (c.team === self.poss) {
+        if (inp.rec && !self.cadence) { self.cycleHotRoute(RECEIVERS[inp.rec - 1]); return; }
         if (inp.action) self.snapTimer = Math.min(self.snapTimer, 0);
       } else if (c.pl) {
         if (inp.action) {
@@ -811,6 +814,10 @@
     if (!this.crossedLOS && b.state === 'held' && b.holder && b.holder.team === this.poss && this.playType !== 'kickoff' && this.relX(b.holder.x) > 0.5) this.crossedLOS = true;
     this.updateBall(dt);
     if (this.phase !== 'live') return;
+    // scoring and the sidelines come before tackles: a carrier who reaches the
+    // end zone in bounds has scored, even if he's hit on the same frame
+    this.checkBounds();
+    if (this.phase !== 'live') return;
     this.checkTackles();
     if (this.phase !== 'live') return;
     this.checkHumanHits();
@@ -826,6 +833,10 @@
     if (this.playType === 'kickoff' && b.state === 'air' && c.team === this.poss) return;
     var hasBall = b.state === 'held' && b.holder === p;
     if (hasBall) {
+      if (this.canPass(p) && inp.rec) {
+        var tr = this.off[RECEIVERS[inp.rec - 1]];
+        if (tr && tr !== p && tr.state !== 'down') { this.throwTo(p, tr, !!inp.turbo); return; }
+      }
       if (this.canPass(p) && inp.aim) {
         // point-and-click passing: the pass goes where the pointer is
         var plan = this.planPass(p, inp.aim, inp.aim.power, null, true);
@@ -1436,6 +1447,8 @@
   };
 
   G.complete = function (rec) {
+    // a catch has to be made in bounds: past the end line or the sideline it's incomplete
+    if (!inBounds(rec)) { this.emit('oobcatch', { p: rec }); this.incomplete(null); return; }
     this.giveBall(rec, false);
     this.log.completed = true; this.log.catcher = rec;
     this.stats.team[rec.team].comp++;
@@ -1588,8 +1601,8 @@
     var b = this.ball;
     if (b.state !== 'held' || !b.holder) return;
     var c = b.holder, t = c.team;
-    if ((c.x - goalOf(t)) * dirOf(t) >= 0) { this.endPlay('td', { team: t, p: c }); return; }
-    if (c.y < 0 || c.y > FW || c.x < -10 || c.x > 110) {
+    if (inBounds(c) && (c.x - goalOf(t)) * dirOf(t) >= 0) { this.endPlay('td', { team: t, p: c }); return; }
+    if (!inBounds(c)) {
       var depth = (c.x - ownGoal(t)) * dirOf(t);
       if (depth < 0) { this.carrierDown(c); return; }
       this.endPlay('oob', { x: c.x });
@@ -1757,6 +1770,42 @@
     if (this.playType === 'run' && (p.role === 'OL0' || p.role === 'OL1')) { this.thinkBlock(p, this.off.RB); return; }
   };
 
+  // Receivers by icon number: 1 WR1, 2 WR2, 3 TE, 4 RB.
+  var RECEIVERS = ['WR1', 'WR2', 'TE', 'RB'];
+  G.RECEIVERS = RECEIVERS;
+
+  // Hot routes at the line. Each press on a receiver's number moves him to
+  // the next route; after the last one he goes back to the called play.
+  // Routes are [downfield, lateral] from where he lines up; lateral is
+  // positive toward his own sideline.
+  var HOT_ROUTES = [
+    { name: 'GO', pts: [[30, 0]], cont: true },
+    { name: 'SLANT', pts: [[2, 0], [10, -7]], cont: true },
+    { name: 'OUT', pts: [[7, 0], [7, 10]], cont: true },
+    { name: 'CURL', pts: [[11, 0], [9, -1]], cont: false },
+    { name: 'IN', pts: [[8, 0], [8, -14]], cont: true },
+    { name: 'FLAT', pts: [[2, 0], [3, 9]], cont: false }
+  ];
+  G.HOT_ROUTES = HOT_ROUTES;
+
+  G.cycleHotRoute = function (role) {
+    var p = this.off[role];
+    if (!p || this.phase !== 'presnap' || (this.playType !== 'pass' && this.playType !== 'screen')) return;
+    if (p.hotIdx == null) { p.hotIdx = -1; p.route0 = p.route; p.cont0 = p.cont; p.blocker0 = p.blocker; }
+    p.hotIdx++;
+    if (p.hotIdx >= HOT_ROUTES.length) {
+      p.hotIdx = -1; p.hotName = null;
+      p.route = p.route0; p.cont = p.cont0; p.blocker = p.blocker0;
+    } else {
+      var r = HOT_ROUTES[p.hotIdx], self = this;
+      var rx = this.relX(p.x), ry = (p.y - MID) * this.dir, side = ry >= 0 ? 1 : -1;
+      p.route = r.pts.map(function (pt) { return self.W(rx + pt[0], clamp(ry + pt[1] * side, -MID + 2, MID - 2)); });
+      p.cont = r.cont; p.blocker = false; p.hotName = r.name;
+    }
+    p.ri = 0;
+    this.emit('hotroute', { p: p, role: role, name: p.hotName || 'PLAY ROUTE' });
+  };
+
   // More rushers than blockers: the back or tight end converts to a quick
   // "hot" route so the QB has an outlet.
   G.hotRoute = function () {
@@ -1767,7 +1816,7 @@
       else if (p.assign === 'rush' || p.assign === 'runfit') rushers++;
     });
     if (rushers <= blockers) return;
-    var hot = [this.off.RB, this.off.TE].filter(function (p) { return p && !p.blocker && p.state === 'ok'; })[0];
+    var hot = [this.off.RB, this.off.TE].filter(function (p) { return p && !p.blocker && !p.hotName && p.state === 'ok'; })[0];
     if (!hot) return;
     var side = (hot.y - MID) * this.dir >= 0 ? 1 : -1;
     hot.route = [this.Wf(this.relX(hot.x) + 4, ((hot.y - MID) * this.dir) / this.flip + side * 2)];
