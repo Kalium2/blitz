@@ -513,10 +513,17 @@
     });
   };
 
+  // Turbo belongs to the player for the rest of the play: someone you haven't
+  // controlled yet this play starts with a full meter, and going back to a
+  // player you already used gives him at least half (or what he had left, if
+  // more). Players are rebuilt every play, so this resets with each snap.
   G.setControl = function (c, p) {
-    if (c.pl) c.pl.ctl = -1;
+    if (c.pl) { c.pl.ctl = -1; c.pl.turboLeft = c.turbo; }
     c.pl = p;
-    if (p) p.ctl = this.ctl.indexOf(c);
+    if (p) {
+      p.ctl = this.ctl.indexOf(c);
+      c.turbo = p.turboLeft == null ? 1 : Math.max(0.5, p.turboLeft);
+    }
   };
 
   // A human keeps the player they're on until a teammate has held the ball
