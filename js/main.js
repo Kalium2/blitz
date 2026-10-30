@@ -315,6 +315,7 @@
             if (inp && inp.turbo && !self3.prevTurbo[i] && g.phase === 'live' && (Math.abs(inp.x) + Math.abs(inp.y) > 0.2)) Audio.play('turbo');
             self3.prevTurbo[i] = !!(inp && inp.turbo);
           });
+          this.footsteps(g, simDt);
           this.crackleT = (this.crackleT || 0) - dt;
           if ((g.fire[0] || g.fire[1]) && g.phase === 'live' && this.crackleT <= 0) { Audio.play('crackle'); this.crackleT = 0.35; }
           this.record(g);
@@ -389,6 +390,21 @@
       if (this.aimCursor === on) return;
       this.aimCursor = on;
       document.body.classList.toggle('aiming', on);
+    },
+
+    // Cleats under the human-controlled players (and the ball carrier), about
+    // four strides a second at full speed.
+    footsteps: function (g, dt) {
+      if (g.phase !== 'live' || dt <= 0) return;
+      var b = g.ball;
+      g.players.forEach(function (p) {
+        var on = p.ctl >= 0 || (b.state === 'held' && b.holder === p);
+        if (!on || p.state !== 'ok' || p.z > 0.05) { p.stepAcc = 0; return; }
+        var v = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (v < 1.5) return;
+        p.stepAcc = (p.stepAcc || 0) + dt * (1.4 + v * 0.36);
+        if (p.stepAcc >= 1) { p.stepAcc -= 1; Audio.play('step'); }
+      });
     },
 
     slotForTeam: function (team) {
@@ -568,6 +584,7 @@
             if (R.cheer) R.cheer(0.25);
             break;
           case 'switch': if (sfx) Audio.play('switch'); break;
+          case 'dive': case 'jump': if (sfx) Audio.play('rustle'); break;
           case 'spin': if (sfx) Audio.play('spin'); break;
           case 'hit':
             if (d.p) R.burst(d.p.x, d.p.y, 1.0, d.big ? 18 : 8, ['#ffffff', '#ffe14a', '#9be38a'], d.big ? 6 : 3, 0.09);
@@ -623,11 +640,11 @@
           case 'touchback': R.banner('TOUCHBACK', { big: false, dur: 1.3, color: '#9aa3c7' }); break;
           case 'punt': R.banner('PUNT', { big: false, dur: 1.2 }); break;
           case 'kickoff': if (!demo && g.time > 1) R.banner('KICKOFF', { big: false, dur: 1.2 }); break;
-          case 'half': R.banner('HALFTIME', { dur: 2.4 }); if (sfx) Audio.play('buzz'); break;
-          case 'quarter': R.banner(d.ot ? 'OVERTIME' : 'END OF ' + FB.ordinal(d.q - 1) + ' QUARTER', { dur: 2.2, big: !!d.ot }); if (sfx) Audio.play('buzz'); break;
+          case 'half': R.banner('HALFTIME', { dur: 2.4 }); if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); } break;
+          case 'quarter': R.banner(d.ot ? 'OVERTIME' : 'END OF ' + FB.ordinal(d.q - 1) + ' QUARTER', { dur: 2.2, big: !!d.ot }); if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); } break;
           case 'final':
             R.banner('FINAL', { dur: 2.6 });
-            if (sfx) { Audio.play('buzz'); Audio.roar(0.9, 4); Audio.call('final', true); }
+            if (sfx) { Audio.play('whistleLong'); Audio.play('buzz'); Audio.roar(0.9, 4); Audio.call('final', true); }
             break;
           case 'select': if (sfx) Audio.roar(0, 1); break;
         }

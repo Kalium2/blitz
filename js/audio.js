@@ -1,8 +1,9 @@
 /*
  * Football Blitz '26 — arcade sound (WebAudio) and announcer (speech).
  *
- * Every sound is synthesized here and every music phrase is an original
- * composition; no audio files are used. Effects run through a compressor so
+ * Field sounds (pads, catches, cleats, whistles, crowd) come from the original
+ * sample pack in assets/audio; arcade stingers, the menu music and a backup of
+ * every field sound are synthesized here. Effects run through a compressor so
  * hits punch through the crowd the way an arcade cabinet mix does.
  */
 (function () {
@@ -40,7 +41,19 @@
     lead: [76, 0, 74, 72, 0, 72, 69, 0, 72, 0, 74, 76, 0, 79, 76, 74]
   };
 
+  // Sample pack: name -> file in assets/audio (variants are picked at random).
+  var SAMPLES = {
+    step: ['cleat_step_01', 'cleat_step_02', 'cleat_step_03', 'cleat_step_04'],
+    pad: ['pad_impact_01', 'pad_impact_02', 'pad_impact_03'],
+    catch: ['ball_catch_01', 'ball_catch_02', 'ball_catch_03'],
+    rustle: ['jersey_rustle_01', 'jersey_rustle_02'],
+    whistle: ['whistle_short'], whistleLong: ['whistle_long'],
+    bed: ['stadium_bed'], swell: ['crowd_swell']
+  };
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+
   var Audio = {
+    bufs: {}, htmlMode: false,
     ctx: null, master: null, fx: null, crowdGain: null, crowdHi: null, music: null,
     enabled: true, announcer: true, musicOn: true, noiseBuf: null, lastSay: 0,
 
@@ -66,6 +79,7 @@
       for (var k = 0; k < 1024; k++) { var x = k / 512 - 1; curve[k] = Math.tanh(x * 6); }
       this.crunch.curve = curve;
       this.crunch.connect(this.fx);
+      this.loadSamples();
       this.startCrowd();
       if (this.wantMusic) this.startMusic();
     },
@@ -74,6 +88,75 @@
       this.enabled = on;
       if (this.master) this.master.gain.value = on ? 0.8 : 0;
       if (!on && window.speechSynthesis) window.speechSynthesis.cancel();
+    },
+
+    // --------------------------------------------------------- samples
+    loadSamples: function () {
+      var self = this, c = this.ctx;
+      // browsers block fetch() from file:// pages, so the downloaded copy plays the files through <audio>
+      if (location.protocol === 'file:' || !window.fetch) { this.htmlMode = true; return; }
+      Object.keys(SAMPLES).forEach(function (k) {
+        SAMPLES[k].forEach(function (f) {
+          fetch('assets/audio/' + f + '.wav').then(function (r) { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+            .then(function (ab) {
+              return new Promise(function (ok, fail) { c.decodeAudioData(ab, ok, fail); });
+            })
+            .then(function (buf) { self.bufs[f] = buf; if (f === 'stadium_bed') self.startBed(); })
+            .catch(function () { /* this sound keeps its synthesized version */ });
+        });
+      });
+    },
+
+    // Play one variant of a sample. Returns false if it isn't available, so the
+    // caller can fall back to the synthesized sound.
+    sample: function (key, vol, rate, delay, dest) {
+      var list = SAMPLES[key];
+      if (!list || !this.ctx) return false;
+      var f = list[(Math.random() * list.length) | 0];
+      rate = rate || 1;
+      if (this.htmlMode) {
+        try {
+          var a = new window.Audio('assets/audio/' + f + '.wav');
+          a.volume = Math.max(0, Math.min(1, vol * 0.8));
+          a.preservesPitch = false; a.mozPreservesPitch = false; a.webkitPreservesPitch = false;
+          a.playbackRate = rate;
+          var go = function () { var pr = a.play(); if (pr && pr.catch) pr.catch(function () {}); };
+          if (delay) setTimeout(go, delay * 1000); else go();
+          return true;
+        } catch (e) { return false; }
+      }
+      var buf = this.bufs[f];
+      if (!buf) return false;
+      var c = this.ctx, t = c.currentTime + (delay || 0);
+      var s = c.createBufferSource(), g = c.createGain();
+      s.buffer = buf; s.playbackRate.value = rate; g.gain.value = vol;
+      s.connect(g); g.connect(dest || this.fx);
+      s.start(t);
+      return true;
+    },
+
+    // Stadium bed: the 12 s loop fades at its ends, so overlapping copies are
+    // crossfaded to keep a continuous bed under the synthesized crowd.
+    startBed: function () {
+      if (this.bed || !this.bufs.stadium_bed) return;
+      var self = this, c = this.ctx, buf = this.bufs.stadium_bed, X = 1.5, len = buf.duration - 1;
+      this.bed = c.createGain(); this.bed.gain.value = 0.32; this.bed.connect(this.fx);
+      // the synthesized crowd steps back to a bright sweetener
+      this.crowdBase = [0.03, 0.012];
+      if (this.crowdGain) { this.crowdGain.gain.value = 0.03; this.crowdHi.gain.value = 0.012; }
+      var next = c.currentTime + 0.05;
+      var schedule = function () {
+        while (next < c.currentTime + 4) {
+          var s = c.createBufferSource(), g = c.createGain();
+          s.buffer = buf; s.connect(g); g.connect(self.bed);
+          g.gain.setValueAtTime(0.0001, next); g.gain.linearRampToValueAtTime(1, next + X);
+          g.gain.setValueAtTime(1, next + len - X); g.gain.linearRampToValueAtTime(0.0001, next + len);
+          s.start(next, 0.5, len);
+          next += len - X;
+        }
+        setTimeout(schedule, 1000);
+      };
+      schedule();
     },
 
     // ----------------------------------------------------------- crowd
@@ -96,8 +179,12 @@
 
     roar: function (amount, dur) {
       if (!this.ctx || !this.crowdGain) return;
-      var t = this.ctx.currentTime;
-      [[this.crowdGain.gain, 0.07, 0.38], [this.crowdHi.gain, 0.015, 0.3]].forEach(function (a) {
+      var t = this.ctx.currentTime, base = this.crowdBase || [0.07, 0.015];
+      var layers = [[this.crowdGain.gain, base[0], 0.38], [this.crowdHi.gain, base[1], 0.3]];
+      if (this.bed) layers.push([this.bed.gain, 0.32, 0.9]);
+      // big moments get the crowd swell on top
+      if (amount >= 0.5 && this.enabled && t - (this.lastSwell || -9) > 2.5) { this.lastSwell = t; this.sample('swell', 0.35 + amount * 0.45, rnd(0.96, 1.04)); }
+      layers.forEach(function (a) {
         var g = a[0];
         g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);
         g.linearRampToValueAtTime(a[1] + amount * a[2], t + 0.12);
@@ -158,12 +245,25 @@
       if (!this.ctx || !this.enabled) return;
       var self = this;
       switch (name) {
-        case 'whistle': this.whistle(0.38); break;
+        case 'whistle': if (!this.sample('whistle', 0.3, rnd(0.98, 1.02))) this.whistle(0.38); break;
+        case 'whistleLong': if (!this.sample('whistleLong', 0.3)) this.whistle(1.1); break;
+        case 'step': this.sample('step', 0.22, rnd(0.9, 1.12)); break;
+        case 'rustle': this.sample('rustle', 0.4, rnd(0.9, 1.15)); break;
         case 'hit':
+          // padded contact, with a little arcade thump underneath
+          if (this.sample('pad', 0.85, rnd(1.02, 1.18))) { this.tone('sine', 150, 45, 0.12, 0.35); break; }
           this.tone('sine', 150, 45, 0.16, 0.7);
           this.noise(0.09, 1800, 0.5, 'bandpass', 0, this.crunch, 0.9);
           break;
         case 'bighit':
+          if (this.sample('pad', 1.0, rnd(0.78, 0.88))) {
+            this.sample('pad', 0.6, rnd(1.0, 1.1), 0.025);
+            this.sample('rustle', 0.35, 1.2, 0.04);
+            this.tone('sine', 120, 32, 0.38, 0.8);
+            this.noise(0.22, 2400, 0.45, 'bandpass', 0, this.crunch, 0.7);
+            this.sweep(0.9, 700, 300, 0.1, 0.12);
+            break;
+          }
           this.tone('sine', 120, 32, 0.38, 1.0);
           this.tone('square', 70, 30, 0.2, 0.25);
           this.noise(0.22, 2400, 0.9, 'bandpass', 0, this.crunch, 0.7);
@@ -179,10 +279,10 @@
           this.sweep(0.25, 2000, 6000, 0.12);
           break;
         case 'bullet': this.sweep(0.16, 1500, 5200, 0.3); this.tone('sawtooth', 300, 900, 0.1, 0.04); break;
-        case 'catch': this.tone('sine', 260, 120, 0.07, 0.55); this.noise(0.05, 1600, 0.45, 'bandpass', 0, null, 1.2); break;
-        case 'snap': this.tone('triangle', 220, 110, 0.07, 0.5); this.noise(0.04, 900, 0.3); break;
+        case 'catch': if (this.sample('catch', 0.9, rnd(0.95, 1.08))) break; this.tone('sine', 260, 120, 0.07, 0.55); this.noise(0.05, 1600, 0.45, 'bandpass', 0, null, 1.2); break;
+        case 'snap': this.tone('triangle', 220, 110, 0.07, 0.5); this.noise(0.04, 900, 0.3); this.sample('rustle', 0.25, 1.1, 0.03); break;
         case 'turbo': this.sweep(0.28, 400, 2600, 0.16); break;
-        case 'spin': this.sweep(0.32, 2600, 600, 0.18); break;
+        case 'spin': this.sweep(0.32, 2600, 600, 0.14); this.sample('rustle', 0.45, rnd(1.05, 1.2)); break;
         case 'switch': this.tone('square', 740, 990, 0.05, 0.07); break;
         case 'menu': this.tone('square', 560, 700, 0.045, 0.06); break;
         case 'select': this.tone('square', 660, 990, 0.08, 0.08); this.tone('square', 990, 1480, 0.1, 0.07, 0.07); break;
