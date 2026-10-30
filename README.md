@@ -20,7 +20,7 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - **Instant replay** of big plays (touchdowns, interceptions, onside recoveries, 25+ yard gains) from a low sideline camera.
 - **Extras:** big heads, infinite turbo, weather (rain, snow, fog, random; rain and snow affect footing, throwing and catching) and a secret, fully fictional team unlocked with a code on the title screen.
 - Final screen shows passing, rushing, receiving and defensive leaders. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
-- Arcade sound design: layered hit, whistle, turbo and fanfare effects, a two-layer crowd that reacts to big plays, an original menu music loop, and a hype announcer with varied calls (browser speech). All of it is original and synthesized in code. There are no art or audio asset files: every model, texture and sound is generated in code.
+- Sound: field sounds (padded hits, catches, cleats, jersey rustles, referee whistles, a stadium bed and crowd swells) come from an original synthesized sample pack in `assets/audio`, layered with arcade stingers, an original menu music loop and a hype announcer with varied calls (browser speech). Every sound also has a synthesized fallback in code. The downloaded copy plays the samples too (through `<audio>`, since browsers block loading files into WebAudio from `file://`).
 - Graphics quality is picked automatically (HIGH: bloom, MSAA, 2K shadows, full crowd; LOW: lighter settings for phones and older machines) and can be changed in **Options**. Browsers without WebGL fall back to a 2D renderer.
 
 ## Controls
@@ -67,7 +67,8 @@ js/render3d.js          3D renderer: player models and animation, stadium, crowd
 js/render.js            HUD overlay and banners; also the 2D fallback renderer
 js/aim.js               point-and-click passing overlay (arc, reticle, power ring)
 js/vendor/three.bundle.js  three.js r160 (MIT license, see js/vendor/THREE-LICENSE.txt)
-js/audio.js             WebAudio sound and speech announcer
+js/audio.js             WebAudio sound, sample playback and speech announcer
+assets/audio/           original sample pack (16 WAVs, 48 kHz)
 js/input.js             keyboard, gamepad and touch input
 js/ui.js, js/main.js    screens and app loop
 ```
