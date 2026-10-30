@@ -225,13 +225,14 @@
       this.ps = { game: game, panels: [], done: done };
       humans.forEach(function (h) {
         var off = h.side === 'off';
-        var list = off ? FB.Plays.OFFENSE.concat(FB.Plays.SPECIAL, [FB.Plays.customPlay(FB.loadCustomPlay())]) : FB.Plays.DEFENSE;
+        // offense: two pages of nine plays, then the special-teams row
+        var list = off ? FB.Plays.OFFENSE.concat(FB.Plays.OFFENSE2, FB.Plays.SPECIAL, [FB.Plays.customPlay(FB.loadCustomPlay())]) : FB.Plays.DEFENSE;
         var panel = document.createElement('div');
         panel.className = 'play-panel p' + (h.slot + 1);
         var t = game.teams[h.team];
         var sit = game.conversion ? '2-PT TRY' : (FB.ordinal(game.down) + ' & ' + (game.isGoalToGo() ? 'GOAL' : game.toGo()) + ' • ' + FB.spotLabel(game));
         panel.innerHTML = '<div class="pp-head"><span class="side">P' + (h.slot + 1) + ' ' + esc(t.abbr) + ' ' + (off ? 'OFFENSE' : 'DEFENSE') + '</span>' +
-          (off ? '<span class="flip-tag">TURBO: FLIP</span>' : '') + '<span class="sit">' + esc(sit) + '</span></div>' +
+          (off ? '<span class="flip-tag page-tag"></span><span class="flip-tag">TURBO: FLIP</span>' : '') + '<span class="sit">' + esc(sit) + '</span></div>' +
           '<div class="pp-grid"></div>' + (off ? '<div class="pp-special"></div>' : '');
         var grid = $('.pp-grid', panel), spec = $('.pp-special', panel);
         var cards = [];
@@ -251,6 +252,7 @@
             var cv = document.createElement('canvas');
             cv.width = 192; cv.height = 108;
             card.appendChild(cv);
+            if (off) card.dataset.page = i < 9 ? 0 : 1;
             var pn = document.createElement('div'); pn.className = 'pn'; pn.textContent = play.name;
             card.appendChild(pn);
             grid.appendChild(card);
@@ -263,14 +265,26 @@
           cards.push(card);
         });
         if (off) {
-          var tag = $('.flip-tag', panel);
+          var tag = $('.flip-tag:not(.page-tag)', panel);
           tag.addEventListener('click', function () { self.toggleFlip(pd); });
+          $('.page-tag', panel).addEventListener('click', function () { if (!pd.locked) self.setPage(pd, 1 - pd.page); });
+          pd.page = 0; self.setPage(pd, 0, true);
         }
         root.appendChild(panel);
         self.ps.panels.push(pd);
       });
       this.refreshPlays();
       this.show('plays');
+    },
+
+    // Show one page of offensive plays (the special-teams row stays).
+    setPage: function (pd, page, quiet) {
+      pd.page = page;
+      pd.cards.forEach(function (c) { if (c.dataset.page != null) c.classList.toggle('off-page', +c.dataset.page !== page); });
+      var tag = $('.page-tag', pd.el);
+      if (tag) tag.textContent = 'PAGE ' + (page + 1) + '/2 \u2022 SPECIAL: MORE PLAYS';
+      if (pd.index < 18 && Math.floor(pd.index / 9) !== page) pd.index = page * 9;
+      if (!quiet) { FB.Audio.play('switch'); this.refreshPlays(); }
     },
 
     toggleFlip: function (pd) {
@@ -308,10 +322,12 @@
       }
     },
 
-    // Rows: three rows of three diagrams, then the special-teams row.
+    // Rows: three rows of three diagrams (the page on show), then the special-teams row.
     playRows: function (pd) {
-      var rows = [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
-      if (pd.cards.length > 9) { var r = []; for (var i = 9; i < pd.cards.length; i++) r.push(i); rows.push(r); }
+      if (!pd.off) return [[0, 1, 2], [3, 4, 5], [6, 7, 8]];
+      var b = pd.page * 9, rows = [[b, b + 1, b + 2], [b + 3, b + 4, b + 5], [b + 6, b + 7, b + 8]];
+      var r = []; for (var i = 18; i < pd.cards.length; i++) r.push(i);
+      if (r.length) rows.push(r);
       return rows;
     },
 
@@ -326,6 +342,7 @@
           return;
         }
         if (inp.turbo && !pd.turboPrev) self.toggleFlip(pd);
+        if (pd.off && inp.special) self.setPage(pd, 1 - pd.page);
         pd.turboPrev = !!inp.turbo;
         var rows = self.playRows(pd), R = 0, C = 0;
         rows.forEach(function (row, ri) { var ci = row.indexOf(pd.index); if (ci >= 0) { R = ri; C = ci; } });
@@ -373,7 +390,7 @@
         var F = FB.Plays.FORMATIONS[play.form];
         var col = { WR1: '#ffd23a', WR2: '#2ee6ff', TE: '#ff7ad9', RB: '#3dff8b' };
         ['WR1', 'WR2', 'TE', 'RB'].forEach(function (role) {
-          var path = play.type === 'run' && role === 'RB' ? play.run : (play.routes && play.routes[role]);
+          var path = play.type === 'run' && role === 'RB' && !play.keeper ? play.run : (play.routes && play.routes[role]);
           if (!path) return;
           var blocks = play.block && play.block[role];
           var sx = F[role][0], sy = F[role][1];
@@ -391,6 +408,19 @@
           if (blocks) { ctx.beginPath(); ctx.moveTo(X(py) - 5, Y(px)); ctx.lineTo(X(py) + 5, Y(px)); ctx.stroke(); }
           else arrow(X(ly), Y(lx), X(py), Y(px), col[role]);
         });
+        // the QB's part: keeper run, play-action fake and rollout, or the draw's drop
+        var Q = F.QB, qpath = null, dashed = false;
+        if (play.keeper) qpath = play.run.map(function (pt) { return [Q[0] + pt[0], Q[1] + pt[1]]; });
+        else if (play.boot) { qpath = [[F.RB[0] + 2.5, F.RB[1]], play.boot]; dashed = true; }
+        else if (play.draw) { qpath = [[Q[0] - 1.5, Q[1]]]; dashed = true; }
+        if (qpath) {
+          ctx.strokeStyle = '#ffffff'; ctx.lineWidth = play.keeper ? 3.5 : 2; ctx.setLineDash(dashed ? [4, 3] : []);
+          ctx.beginPath(); ctx.moveTo(X(Q[1]), Y(Q[0]));
+          qpath.forEach(function (pt) { ctx.lineTo(X(pt[1]), Y(pt[0])); });
+          ctx.stroke(); ctx.setLineDash([]);
+          var e = qpath[qpath.length - 1], s0 = qpath.length > 1 ? qpath[qpath.length - 2] : Q;
+          if (!play.draw) arrow(X(s0[1]), Y(s0[0]), X(e[1]), Y(e[0]), '#ffffff');
+        }
         ['QB', 'RB', 'WR1', 'WR2', 'TE', 'OL0', 'OL1'].forEach(function (role) {
           var p = F[role];
           ctx.fillStyle = role === 'QB' ? '#fff' : (role.indexOf('OL') === 0 ? '#9aa3c7' : col[role]);

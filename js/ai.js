@@ -14,7 +14,7 @@
   }
 
   function pickOffense(g) {
-    var O = FB.Plays.OFFENSE, S = FB.Plays.SPECIAL;
+    var O = FB.Plays.OFFENSE.concat(FB.Plays.OFFENSE2), S = FB.Plays.SPECIAL;
     var toGo = g.toGo(), ytg = g.yardsToGoal();
     var trailing = g.score[g.poss] < g.score[1 - g.poss];
     var late = (g.quarter >= 4 && g.clock < 75) || (g.quarter === 2 && g.clock < 25);
@@ -28,10 +28,11 @@
     }
     if (g.quarter === 2 && g.clock < 8 && g.fgDistance() <= 50 && !g.conversion) return byId(S, 'fg');
     if ((g.quarter >= 4) && g.clock < 10 && ytg > 30 && trailing) return byId(O, 'hail');
-    if (g.conversion || ytg <= 6) return weighted(O, { slants: 3, mesh: 3, blast: 3, toss: 2, curl: 2 });
-    if (toGo <= 3) return weighted(O, { blast: 4, toss: 3, slants: 3, curl: 2, screen: 2, mesh: 2 });
-    if (toGo >= 12) return weighted(O, { deep: 4, post: 4, mesh: 3, curl: 2, slants: 2, screen: 1, toss: 1 });
-    return weighted(O, { slants: 3, deep: 2, curl: 3, post: 3, mesh: 3, screen: 2, blast: 2, toss: 2 });
+    if (!g.conversion && toGo <= 1 && Math.random() < 0.45) return byId(O, 'sneak');
+    if (g.conversion || ytg <= 6) return weighted(O, { slants: 3, mesh: 3, blast: 3, toss: 2, curl: 2, stick: 3, smash: 2, paboot: 2, counter: 2 });
+    if (toGo <= 3) return weighted(O, { blast: 4, toss: 3, slants: 3, curl: 2, screen: 2, mesh: 2, stick: 3, counter: 3, paboot: 2 });
+    if (toGo >= 12) return weighted(O, { deep: 4, post: 4, mesh: 3, curl: 2, slants: 2, screen: 1, toss: 1, verts: 4, flood: 3, drive: 2, draw: 2 });
+    return weighted(O, { slants: 3, deep: 2, curl: 3, post: 3, mesh: 3, screen: 2, blast: 2, toss: 2, smash: 3, flood: 2, stick: 2, drive: 3, paboot: 3, draw: 2, counter: 2, verts: 1 });
   }
 
   function pickDefense(g) {

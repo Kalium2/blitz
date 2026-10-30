@@ -273,10 +273,13 @@
     });
     var qb = this.off.QB;
     if (play.type === 'run') {
-      var rb = this.off.RB;
-      rb.route = play.run.map(function (pt) { return self.Wf(F.RB[0] + pt[0], F.RB[1] + pt[1]); });
+      // the designed runner follows the run path (the QB himself on a keeper)
+      var runner = play.keeper ? qb : this.off.RB, rf = F[play.keeper ? 'QB' : 'RB'];
+      runner.route = play.run.map(function (pt) { return self.Wf(rf[0] + pt[0], rf[1] + pt[1]); });
     }
-    this.qbDrop = play.form === 'under' ? this.W(-5.5, 0) : this.W(F.QB[0] - (play.drop ? play.drop - 5 : 1.5), 0);
+    this.qbDrop = play.boot ? this.Wf(play.boot[0], play.boot[1])
+      : play.draw ? this.W(F.QB[0] - 1.5, 0)
+      : play.form === 'under' ? this.W(-5.5, 0) : this.W(F.QB[0] - (play.drop ? play.drop - 5 : 1.5), 0);
 
     // defense
     var dInfos = { F1: dt.defense[0], F2: dt.defense[1], M: dt.defense[2], B1: dt.defense[3], B2: dt.defense[4], NT: dt.depth[0], DB: dt.depth[1] };
@@ -334,7 +337,7 @@
       spot: { x: holder.x, y: holder.y }, power: null, acc: null, meterT: 0, crossed: false, done: false };
     if (!a.human) {
       // CPU picks power for the distance and aims partly into the wind
-      var need = punt ? 0.75 + rnd(-0.15, 0.25) : this.cpuKickPower(kind);
+      var need = punt ? this.cpuPuntPower() : this.cpuKickPower(kind);
       a.power = clamp(need, 0.15, 1);
       var skill = [1.4, 1, 0.75][this.diff] || 1;
       if (this.attract) skill = 1;
@@ -353,6 +356,14 @@
 
   // Kick physics constants (yards, seconds).
   var GRAV = 10.67, FG_ANGLE = 0.66, PUNT_ANGLE = 0.95;
+  // CPU punter: full leg from deep in his own end, but from near midfield he
+  // drops it around the 15 so the bounce has room before the goal line.
+  G.cpuPuntPower = function () {
+    var toGoal = (goalOf(this.poss) - this.losX) * this.dir;
+    var want = Math.min(62, toGoal + 12 - 15 - 10);               // carry, leaving ~10 yards of roll
+    var v = Math.sqrt(Math.max(1, want) * GRAV / Math.sin(2 * PUNT_ANGLE));
+    return clamp((v - 18) / 9.5 + rnd(-0.08, 0.08), 0.15, 1);
+  };
   G.kickSpeed = function (kind, power) { return kind === 'punt' ? 18 + power * 9.5 : 16 + power * 11.5; };
   G.goalPostX = function () { return goalOf(this.poss) + 10 * dirOf(this.poss); };
   // Power a CPU kicker needs to clear the bar with a little margin.
@@ -374,7 +385,11 @@
     // everyone holds their stance until the snap, then blocks / covers
     this.players.forEach(function (p) {
       p.want.x = 0; p.want.y = 0; p.wantTurbo = false;
-      if (a.stage === 'flight' && a.kind === 'punt' && p !== a.kicker) { self.goTo(p, b.x, b.y + p.lane * 4, p.team === o); p.wantSpeed = 0.8; }
+      if ((a.stage === 'flight' || a.stage === 'roll') && a.kind === 'punt' && p !== a.kicker) {
+        // the outside gunners sprint to the ball to down it; everyone else covers in lanes
+        var gunner = p.team === o && (p.key === 'K2' || p.key === 'K3');
+        self.goTo(p, b.x, b.y + (gunner ? 0 : p.lane * 4), p.team === o); p.wantSpeed = gunner ? 1 : 0.8;
+      }
       else if (a.stage === 'flight' && p.team !== o && p.key.charAt(0) === 'D' && +p.key.slice(1) < 3) { self.goTo(p, a.spot.x, a.spot.y, true); p.wantSpeed = 0.5; }
       self.movePlayer(p, dt);
       p.wantSpeed = 1;
@@ -436,8 +451,51 @@
       if (b.z <= 0.15) {
         b.z = 0.15;
         if (a.kind !== 'punt' && !a.crossed) { a.crossed = true; a.good = false; this.emit('fgmiss', { kind: a.kind, dist: a.dist, team: o, why: 'short' }); }
-        if (a.kind === 'punt') a.land = { x: b.x, y: b.y };
+        if (a.kind === 'punt') {
+          // a punt doesn't stop where it lands: it bounces and rolls
+          var tl = a.ft;
+          a.bvx = (a.vx + w.x * tl) * rnd(0.3, 0.55); a.bvy = (a.vy + w.y * tl) * rnd(0.3, 0.55) + rnd(-2, 2);
+          a.bvz = Math.max(2.5, -(a.vz - GRAV * tl) * rnd(0.3, 0.45));
+          a.stage = 'roll'; a.rollT = 0; a.hops = 0;
+          this.emit('puntbounce', { x: b.x, y: b.y });
+          return;
+        }
         a.stage = 'done'; a.t = 1.1;
+      }
+      return;
+    }
+    if (a.stage === 'roll') {
+      // Footballs bounce badly: each hop loses speed, can kick sideways, and
+      // now and then checks up or hops back toward the kicker.
+      a.rollT += dt;
+      b.x += a.bvx * dt; b.y += a.bvy * dt; b.z += a.bvz * dt; a.bvz -= GRAV * dt;
+      b.spin += dt * (10 + Math.abs(a.bvx));
+      if (b.z <= 0.15) {
+        b.z = 0.15;
+        if (a.bvz < -1.2) {
+          a.hops++;
+          a.bvz = -a.bvz * rnd(0.3, 0.5);
+          var keep = rnd(0.45, 0.8);
+          if (Math.random() < 0.22) keep = -rnd(0.15, 0.45);       // checks up and hops back
+          a.bvx *= keep; a.bvy = a.bvy * rnd(0.4, 0.9) + rnd(-2.5, 2.5);
+          this.emit('puntbounce', { x: b.x, y: b.y });
+        } else {
+          // rolling: friction until it dies
+          a.bvz = 0;
+          var sp = len(a.bvx, a.bvy), f = Math.max(0, sp - 10 * dt) / (sp || 1);
+          a.bvx *= f; a.bvy *= f;
+        }
+      }
+      var outSide = b.y < 0 || b.y > FW, dead = len(a.bvx, a.bvy) < 0.3 && b.z <= 0.16;
+      // the coverage team downs it once they get a hand on it (short of the end zone)
+      var downer = null;
+      if (b.z < 1.4 && (b.x - goalOf(o)) * this.dir < 0) this.players.forEach(function (p) { if (!downer && p.team === o && p !== a.kicker && p.state === 'ok' && dist(p, b) < 1.1) downer = p; });
+      if (downer) this.emit('downed', { p: downer });
+      if (outSide || dead || downer || a.rollT > 4 || b.x < -10 || b.x > 110) {
+        b.y = clamp(b.y, 0, FW);
+        a.land = { x: b.x, y: b.y };
+        if (outSide) this.emit('puntoob', {});
+        a.stage = 'done'; a.t = 0.8;
       }
       return;
     }
@@ -711,6 +769,7 @@
     }
     this.emit('snap', {});
     this.stats.team[this.poss].plays++;
+    if (this.offPlay.keeper) { this.handedOff = true; this.log.rusher = this.off.QB; }
     // Jumping the snap: a defender you control who is already driving forward
     // when the ball moves explodes off the line, and for a moment the blockers
     // can't pick him up.
@@ -783,7 +842,7 @@
       var rb = this.off.RB, qb = this.off.QB;
       if (this.offPlay.pitch) {
         if (this.playT >= this.pitchAt) this.pitchTo(qb, rb);
-      } else if (dist(qb, rb) < 1.3 || this.playT > 0.75) {
+      } else if (this.offPlay.draw ? this.playT > 0.45 : (dist(qb, rb) < 1.3 || this.playT > 0.75)) {
         this.giveBall(rb, qb.x < 0);
         this.handedOff = true;
         this.log.rusher = rb;
@@ -935,7 +994,7 @@
   // has not crossed the line of scrimmage on this play.
   G.canPass = function (p) {
     if (this.playType === 'kickoff' || this.crossedLOS || p.team !== this.poss) return false;
-    if (this.playType === 'run' && !this.handedOff) return false;
+    if (this.playType === 'run' && (!this.handedOff || this.offPlay.keeper)) return false;
     return this.relX(p.x) <= 0.5;
   };
 
@@ -1450,7 +1509,7 @@
       if (dist(d, b) > (jumped ? 1.1 : 0.7)) return;
       self.flightChecked.push(d);
       var r = Math.random();
-      var pInt = 0.18 + (d.r.cth - 60) / 200 + (jumped ? 0.12 : 0) + (self.fire[d.team] ? 0.06 : 0) + (self.powerOf(d) === 'hands' ? 0.1 : 0);
+      var pInt = 0.15 + (d.r.cth - 60) / 200 + (jumped ? 0.11 : 0) + (self.fire[d.team] ? 0.06 : 0) + (self.powerOf(d) === 'hands' ? 0.1 : 0);
       if (r < pInt) hit = ['int', d];
       else if (r < pInt + 0.3) hit = ['tip', d];
     });
@@ -1484,10 +1543,10 @@
     var defIn = bestD && dD < reach(bestD) * 0.62;
     var offIn = bestO && dO < reach(bestO);
     if (defIn && (!offIn || dD < dO)) {
-      var pInt = 0.12 + (bestD.r.cth - 60) / 220 + (bestD.r.cov - 75) / 350 + jumpBonus(bestD);
+      var pInt = 0.1 + (bestD.r.cth - 60) / 220 + (bestD.r.cov - 75) / 350 + jumpBonus(bestD);
       if (this.fire[bestD.team]) pInt += 0.08;
       if (this.powerOf(bestD) === 'hands') pInt += 0.15;
-      if (Math.random() < clamp(pInt, 0.05, 0.45)) { this.intercept(bestD); return; }
+      if (Math.random() < clamp(pInt, 0.04, 0.38)) { this.intercept(bestD); return; }
       // deflection, offense can still haul it in sometimes
       if (!(offIn && Math.random() < 0.18)) { this.incomplete(bestD); return; }
     }
@@ -1653,7 +1712,10 @@
       else this.endPlay('safety', { team: t });
       return;
     }
-    this.endPlay('tackle', { x: c.x });
+    var x = c.x;
+    // a QB on a sneak lunges forward as he goes down
+    if (this.offPlay && this.offPlay.keeper && c === this.off.QB && c.team === this.poss) x += this.dir * 1.3;
+    this.endPlay('tackle', { x: x });
   };
 
   G.checkBounds = function () {
@@ -1714,6 +1776,8 @@
   G.thinkHandoffQB = function (p) {
     var rb = this.off.RB;
     if (this.offPlay.pitch) { p.want.x = -this.dir * 0.2; p.want.y = 0; return; }
+    // draw: drop back like a pass, then give it to the back
+    if (this.offPlay.draw && this.playT < 0.45) { this.goTo(p, this.qbDrop.x, this.qbDrop.y, false, 0.8); return; }
     this.goTo(p, rb.x, rb.y, false);
   };
 
@@ -1722,8 +1786,10 @@
     var drop = this.qbDrop;
     var t = this.playT;
     var pressure = this.pressureOn(p);
-    var dropped = dist(p, drop) < 0.8 || t > 1.1;
-    if (!dropped) this.goTo(p, drop.x, drop.y, false, 1);
+    var pa = this.offPlay.pa && t < 0.35;
+    var dropped = !pa && (dist(p, drop) < 0.8 || t > (this.offPlay.boot ? 1.6 : 1.1));
+    if (pa) { var mesh = this.Wf(-4.5, 1.2); this.goTo(p, mesh.x, mesh.y, true, 1); }   // the fake, at the mesh point
+    else if (!dropped) this.goTo(p, drop.x, drop.y, !!this.offPlay.boot, 1);          // a bootleg is a sprint
     // read progression
     var recs = this.eligible(p.team).filter(function (r) { return !(self.offPlay.block && self.offPlay.block[r.role]); });
     var best = null, bs = -1e9, bestOpen = 0;
@@ -1738,6 +1804,7 @@
     if (this.offPlay.type === 'screen') tMin = 1.0;
     if (this.hotRecv && this.openness(this.hotRecv) > 2.5) tMin = 0.6;
     if (this.offPlay.id === 'hail') tMin = 2.4;
+    if (this.offPlay.pa) tMin += 0.3;
     var throwIt = false;
     if (best) {
       if (t > tMin && bestOpen > 3.2) throwIt = true;
@@ -1773,7 +1840,7 @@
   G.thinkCarrier = function (p) {
     var self = this, t = p.team, dir = dirOf(t);
     // follow the designed run path first
-    if (p.role === 'RB' && this.playType === 'run' && p.route && p.ri < p.route.length && this.playT < 1.6) {
+    if ((p.role === 'RB' || (p.role === 'QB' && this.offPlay.keeper)) && this.playType === 'run' && p.route && p.ri < p.route.length && this.playT < 1.6) {
       var pt = p.route[p.ri];
       if (dist(p, pt) < 1.2) p.ri++;
       if (p.ri < p.route.length) { this.goTo(p, pt.x, pt.y, true); return; }
@@ -2004,7 +2071,7 @@
       return;
     }
     var carrier = b.state === 'held' ? b.holder : null;
-    var qbInPocket = carrier && carrier.role === 'QB' && !this.handedOff && !this.passThrown && this.relX(carrier.x) <= 0.5 && this.playType !== 'run';
+    var qbInPocket = carrier && carrier.role === 'QB' && !this.handedOff && !this.passThrown && this.relX(carrier.x) <= 0.5 && (this.playType !== 'run' || this.offPlay.draw);
     if (b.state === 'air' && b.kind === 'pass') {
       var L = { x: b.tx, y: b.ty };
       var react = 0.45 - (p.r.cov - 60) / 100;
@@ -2037,9 +2104,16 @@
     var a = p.assign, self = this;
     var qb = this.off.QB;
     var carrier = this.ball.holder;
+    // play-action: for a moment everyone reads run and steps up toward the back
+    if (this.offPlay.pa && this.playT < 0.55 && !this.passThrown && a !== 'rush') {
+      var rbk = this.off.RB, bite = 0.5 + (95 - p.r.cov) / 100;
+      if (this.playT < bite * 0.55) { this.goTo(p, rbk.x + this.dir * 3, lerpN(p.y, rbk.y, 0.3), false, 0.8); return; }
+    }
     if (a === 'rush' || a === 'runfit') {
       var tgt = carrier || qb;
       if (a === 'runfit' && this.playType !== 'run' && this.playT < 0.5) tgt = this.off.RB;
+      // play-action: the rushers crash down on the back at the fake
+      if (a === 'rush' && this.offPlay.pa && this.playT < 0.6 && p.ctl < 0) tgt = this.off.RB;
       // rushers loop around blockers a bit
       var ty = tgt.y;
       if (p.key === 'F1') ty -= 0.8 * this.dir; else if (p.key === 'F2') ty += 0.8 * this.dir;

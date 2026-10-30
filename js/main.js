@@ -594,6 +594,9 @@
           case 'hot': if (!demo && g.isHuman(g.poss)) R.banner('HOT ROUTE', { big: false, dur: 1.0, color: '#ffd23a' }); break;
           case 'hotroute': if (sfx) Audio.play('switch'); break;
           case 'windup': if (R.notify) R.notify('throw', d); break;
+          case 'puntbounce': if (sfx) Audio.play('kick'); break;
+          case 'downed': R.banner('DOWNED', { big: false, dur: 1.0, color: '#9aa3c7' }); break;
+          case 'puntoob': R.banner('OUT OF BOUNDS', { big: false, dur: 1.0, color: '#9aa3c7' }); break;
           case 'getoff': if (sfx) Audio.play('turbo'); if (!demo) R.banner('GREAT JUMP!', { big: false, dur: 0.8, color: '#2ee6ff' }); break;
           case 'timeoutcalled': if (!demo) R.banner('TIMEOUT CALLED', { big: false, sub: 'AFTER THE PLAY', dur: 1.2, color: '#2ee6ff' }); break;
           case 'timeout':
