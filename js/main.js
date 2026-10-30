@@ -451,7 +451,9 @@
           if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
-        if (b.state === 'air' && b.kind === 'pass') return S + ': JUMP FOR THE BALL';
+        if (b.state === 'held' && b.holder && b.holder.team === c.team) return A + ': SWITCH TO BALL CARRIER';
+        if (b.state === 'air' && b.kind === 'pass') return A + ': SWITCH PLAYER  \u2022  ' + S + ': JUMP FOR THE BALL';
+        if (b.state === 'loose') return A + ': SWITCH TO NEAREST PLAYER';
         if (b.state === 'held' && b.holder && b.holder.team !== c.team) return A + ': DIVE / SWITCH  •  ' + T + ': TURBO';
       }
       if (g.phase === 'dead') return A + ': LATE HIT!';

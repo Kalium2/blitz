@@ -519,15 +519,17 @@
     if (p) p.ctl = this.ctl.indexOf(c);
   };
 
-  // Keep each human on the most relevant player as the play develops.
+  // A human keeps the player they're on until a teammate has held the ball
+  // for HOLD_SWITCH seconds (a catch, handoff, pitch, pick or recovery), or
+  // until they switch by hand. Passes in the air and loose balls never move
+  // control on their own.
+  var HOLD_SWITCH = 0.5;
   G.autoControl = function () {
     var b = this.ball, self = this;
     this.ctl.forEach(function (c) {
       var want = null;
-      if (b.state === 'held' && b.holder && b.holder.team === c.team) want = b.holder;
-      else if ((b.state === 'air' || b.state === 'pitch') && b.target && b.target.team === c.team && b.kind !== 'kick') want = b.target;
-      else if (b.state === 'loose') {
-        if (!c.pl || dist(c.pl, b) > 6) want = self.nearestTo(c.team, b, null);
+      if (b.state === 'held' && b.holder && b.holder.team === c.team) {
+        if (self.heldT >= HOLD_SWITCH) want = b.holder;
       } else if (c.pl && c.pl.team !== c.team) {
         want = self.nearestTo(c.team, b, null);
       } else if (!c.pl) {
@@ -720,6 +722,11 @@
       }
     }
 
+    // how long the current ball carrier has had it
+    if (b.state === 'held' && b.holder) {
+      if (b.holder !== this.heldBy) { this.heldBy = b.holder; this.heldT = 0; }
+      else this.heldT += dt;
+    } else { this.heldBy = null; this.heldT = 0; }
     this.autoControl();
 
     // ---- humans
@@ -803,11 +810,15 @@
       return;
     }
     if (b.state === 'air' && b.kind === 'pass') {
-      if (inp.special || inp.action) {
-        if (p.team === this.ballTeam || dist(p, { x: b.tx, y: b.ty }) < 4) { this.startJump(p); return; }
+      // near the landing spot both buttons jump for it; farther away Action switches to the closest teammate
+      var nearLand = dist(p, { x: b.tx, y: b.ty }) < 4;
+      if (inp.special || (inp.action && nearLand)) {
+        if (p.team === this.ballTeam || nearLand) { this.startJump(p); return; }
       }
     }
     var teamHasBall = (b.state === 'held' && b.holder && b.holder.team === c.team);
+    // a teammate has the ball but control hasn't moved yet: Action takes him now
+    if (teamHasBall && inp.action && b.holder !== p) { this.setControl(c, b.holder); this.emit('switch', {}); return; }
     if (!teamHasBall && inp.action) {
       var carrier = b.state === 'held' ? b.holder : null;
       if (carrier && dist(p, carrier) < 3.4 && p.state === 'ok' && !p.eng) {
