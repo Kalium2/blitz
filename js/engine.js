@@ -299,6 +299,7 @@
     this.phase = 'presnap';
     var humanOff = this.isHuman(o);
     this.snapTimer = humanOff ? 15 : rnd(1.1, 1.8) + (this.isHuman(d) ? 0.7 : 0);
+    this.cadence = null;
     this.assignControl(true);
     this.emit('setup', {});
   };
@@ -387,7 +388,13 @@
       b.x = a.center.x; b.y = a.center.y; b.z = 0.25;
       return;
     }
-    if (a.stage === 'wait') { b.x = a.center.x; b.y = a.center.y; b.z = 0.25; if (a.t <= 0) { a.stage = 'snap'; a.t = 0.42; this.emit('snap', {}); } return; }
+    if (a.stage === 'wait') {
+      b.x = a.center.x; b.y = a.center.y; b.z = 0.25;
+      // the holder (or punter) calls the same cadence before the long snap
+      if (!this.cadence) this.cadence = { t: 0, n: 0, who: a.holder };
+      if (this.stepCadence(dt)) { a.stage = 'snap'; a.t = 0.42; this.emit('snap', {}); }
+      return;
+    }
     if (a.stage === 'snap') {
       var s = 1 - Math.max(0, a.t) / 0.42;
       b.x = a.center.x + (a.holder.x - a.center.x) * s; b.y = a.center.y + (a.holder.y - a.center.y) * s;
@@ -588,9 +595,13 @@
     });
   };
 
+  // The QB's cadence before every scrimmage snap: HUT, HUT, HIKE!, then the ball.
+  var CADENCE = { words: ['HUT', 'HUT', 'HIKE'], at: [0, 0.42, 0.84], snap: 1.05 };
+
   G.updatePresnap = function (dt, inputs) {
     var self = this;
     this.snapTimer -= dt;
+    var callSnap = !!this.cadence && this.playType !== 'kickoff' && this.stepCadence(dt);
     // Humans: defense may move and cycle defenders, offense snaps.
     this.ctl.forEach(function (c) {
       var inp = inputs[c.slot] || {};
@@ -606,9 +617,9 @@
         }
         return;
       }
-      if (inp.special) { self.audible(c.team === self.poss ? 'off' : 'def'); return; }
+      if (inp.special && !self.cadence) { self.audible(c.team === self.poss ? 'off' : 'def'); return; }
       if (c.team === self.poss) {
-        if (inp.action) self.snapTimer = 0;
+        if (inp.action) self.snapTimer = Math.min(self.snapTimer, 0);
       } else if (c.pl) {
         if (inp.action) {
           var keys = ['M', 'B2', 'B1', 'DB', 'F1', 'F2', 'NT'];
@@ -631,7 +642,25 @@
       if (p.team !== self.poss && self.playType !== 'kickoff' && self.relX(p.x) < 0.9) p.x = self.losX + 0.9 * self.dir;
       p.wantSpeed = 1;
     });
-    if (this.snapTimer <= 0) this.snap();
+    if (this.snapTimer <= 0) {
+      if (this.playType === 'kickoff') this.snap();
+      else if (callSnap) this.snap();
+      else if (!this.cadence) this.cadence = { t: 0, n: 0, who: this.off.QB };
+    }
+  };
+
+  // Advance the cadence, calling each word on its beat. True once it's time to snap.
+  G.stepCadence = function (dt) {
+    var cd = this.cadence;
+    cd.t += dt;
+    while (cd.n < CADENCE.at.length && cd.t >= CADENCE.at[cd.n]) {
+      cd.word = CADENCE.words[cd.n]; cd.wordT = cd.t;
+      this.emit('cadence', { word: cd.word, n: cd.n, last: cd.n === CADENCE.at.length - 1 });
+      cd.n++;
+    }
+    if (cd.t < CADENCE.snap) return false;
+    this.cadence = null;
+    return true;
   };
 
   // Audible at the line: swap to a hot route / blitz without going back to the huddle.

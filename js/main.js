@@ -574,7 +574,8 @@
           case 'onsidefail': R.banner('RECEIVING TEAM RECOVERS', { big: false, dur: 1.5 }); break;
           case 'lateral': R.banner('LATERAL!', { big: false, dur: 1.0 }); if (sfx) { Audio.play('throw'); Audio.call('lateral'); } break;
           case 'stiff': if (sfx) { Audio.play('hit'); if (Math.random() < 0.4) Audio.call('stiff'); } if (!demo && Math.random() < 0.35) R.banner('STIFF ARM!', { big: false, dur: 0.9 }); break;
-          case 'snap': if (sfx) { Audio.play('snap'); if (Math.random() < 0.5) Audio.call('hut'); } break;
+          case 'cadence': if (sfx) Audio.cadence(d.word, d.n); break;
+          case 'snap': if (sfx) Audio.play('snap'); break;
           case 'throw':
             if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw');
             if (R.notify) R.notify('throw', d);

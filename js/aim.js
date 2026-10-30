@@ -143,9 +143,28 @@
     label(ctx, n.t, x, y + r + 16, 12, n.c);
   }
 
+  // The QB's snap count pops up over his helmet: HUT! HUT! HIKE!
+  function drawCadence(ctx, R, g) {
+    var cd = g.cadence, qb = cd && (cd.who || (g.off && g.off.QB));
+    if (!cd || !cd.word || !qb) return;
+    var age = cd.t - cd.wordT, hike = cd.word === 'HIKE';
+    if (age > (hike ? 0.5 : 0.36)) return;
+    var s = R.project(qb.x, qb.y, 3.1);
+    if (!s) return;
+    var pop = age < 0.08 ? 0.6 + age / 0.08 * 0.6 : 1.2 - Math.min(0.2, (age - 0.08) * 1.5);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, ((hike ? 0.5 : 0.36) - age) / 0.12);
+    ctx.translate(s.x, s.y - 14);
+    ctx.scale(pop, pop);
+    ctx.transform(1, 0, -0.18, 1, 0, 0);
+    label(ctx, cd.word + '!', 0, 0, hike ? 30 : 22, hike ? GOLD : '#ffffff');
+    ctx.restore();
+  }
+
   FB.drawAim = function (ctx, R, g, ui) {
     if (!ui) return;
     var time = g.time || 0, plan = ui.plan || g.aimPlan;
+    drawCadence(ctx, R, g);
     ctx.save();
     if (plan && ui.active) {
       drawArc(ctx, R, plan, ui, time);

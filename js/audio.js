@@ -29,8 +29,7 @@
     stiff: ['Stiff arm!', 'Get off me!'],
     lateral: ['Lateral!', 'Pitch it back!'],
     kickoff: ['Here we go!', 'Let\'s play some football!', 'Kickoff!'],
-    final: ['That\'s the game!', 'Final whistle!'],
-    hut: ['Hut, hut!', 'Hike!', 'Set, hut!']
+    final: ['That\'s the game!', 'Final whistle!']
   };
 
   // Original 8-bar loop (A minor) for the menus.
@@ -331,6 +330,23 @@
       var pref = en.filter(function (v) { return /male|david|daniel|alex|fred|guy|mark|george/i.test(v.name); });
       this._voice = pref[0] || en[0] || null;
       return this._voice;
+    },
+
+    // The QB's snap count. Each word is spoken on its beat (not queued behind
+    // the announcer), in a higher, sharper voice than the announcer's.
+    cadence: function (word, n) {
+      if (!this.enabled || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+      try {
+        window.speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(word === 'HIKE' ? 'Hike!' : 'Hut!');
+        u.rate = word === 'HIKE' ? 1.25 : 1.5; u.pitch = word === 'HIKE' ? 1.05 : 0.95; u.volume = 1;
+        var v = this.voice();
+        if (v) u.voice = v;
+        window.speechSynthesis.speak(u);
+        this.lastSay = Date.now();
+      } catch (e) { /* speech is optional */ }
+      // a short bark under each word keeps the rhythm even without speech
+      this.noise(0.06, 900, word === 'HIKE' ? 0.32 : 0.2, 'bandpass', 0, null, 1.5);
     },
 
     call: function (kind, force) { if (CALLS[kind]) this.say(pick(CALLS[kind]), force); },
