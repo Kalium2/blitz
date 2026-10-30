@@ -1,10 +1,10 @@
 /* Football Blitz '26 service worker: network first, cache fallback for offline play. */
-var CACHE = 'fb26-v6';
+var CACHE = 'fb26-v7';
 var FILES = [
   './', './index.html', './css/style.css', './manifest.webmanifest',
   './js/vendor/three.bundle.js', './js/render3d.js',
   './js/data/template.js', './js/data/teams.js', './js/plays.js', './js/ai.js', './js/engine.js',
-  './js/render.js', './js/audio.js', './js/input.js', './js/ui.js', './js/main.js',
+  './js/render.js', './js/aim.js', './js/audio.js', './js/input.js', './js/ui.js', './js/main.js',
   './assets/icon.svg', './assets/icon-192.png', './assets/icon-512.png'
 ];
 self.addEventListener('install', function (e) {

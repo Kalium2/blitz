@@ -13,7 +13,7 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - 9 offensive plays plus punt, field goal, **fake punt**, **fake field goal** and **MY PLAY** (from the **Create a Play** editor); 9 defensive calls. Any offensive play can be **flipped** (TURBO on play select).
 - Arcade moves: **bullet passes** (hold TURBO when throwing), **stiff-arms** (TURBO+ACTION), **laterals** (TURBO+SPECIAL), spins, hurdles, dive tackles and late hits. **Audibles** at the line (SPECIAL) for offense and defense. **Onside kicks** (SPECIAL when kicking off).
 - **Tackling:** contact brings the carrier down; only a timed move beats it (spin vs. arm tackles, stiff-arm vs. tacklers in front, hurdle vs. dives). **Turbo refills at the start of every play.**
-- **Passing:** throws go where you aim, led to the receiver; incompletions and picks come from defenders in the throwing lane (a lob can float over a short defender, a bullet can't). Any ball carrier still behind the line of scrimmage can throw.
+- **Point-and-click passing:** aim with the mouse (or a finger) and click. A dotted arc previews the throw (red where a defender can reach it) and a reticle shows the landing spot rated OPEN, TIGHT or COVERED. Near a receiver the aim locks on and leads him, and where you point relative to him places the ball; anywhere else the ball goes to that spot. Hold the click to charge a power ring from lob to bullet; release on the gold band for a **PERFECT** throw with much tighter accuracy, hold too long and it wobbles. Incompletions and picks come from defenders in the throwing lane (a lob can float over a short defender, a bullet can't). Any ball carrier still behind the line of scrimmage can throw.
 - **Kicking:** real snap, holder and run-up, with a two-press power/aim meter for field goals, extra points and punts and a power meter for kickoffs. Kicks fly with gravity and **wind** (shown in the HUD); field goals are good only if the ball clears the bar between the uprights.
 - **Power-ups:** a glowing token sometimes appears on the field. Touch it for SPEED, HANDS or TANK for a few plays.
 - **Smarter teammates:** hot routes against blitzes, a scramble drill when the QB extends the play, and lead blocking for the ball carrier.
@@ -33,7 +33,7 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 | Special (hurdle, jump for ball) | E / L | E | Num Enter or `,` | B / Y |
 | Pause | Esc / P | Esc | Enter | Start |
 
-To pass, point the stick at a receiver and press Action. With the stick centered, the ball goes to the most open receiver, marked by the pulsing ring.
+To pass with the mouse, point at a receiver (or any spot) and click; hold and release on the gold band of the power ring for a perfect throw, right-click to cancel. Elsewhere a left click works as Action (snap, switch, dive) and a right click as Special. With a keyboard or gamepad, point the stick at a receiver and press Action; with the stick centered, the ball goes to the most open receiver, marked by the pulsing ring.
 
 ## Player ratings: template and fantasy stats
 
@@ -65,6 +65,7 @@ js/engine.js            simulation: physics, AI, rules, clock, stats
 js/ai.js                CPU play calling
 js/render3d.js          3D renderer: player models and animation, stadium, crowd, camera, effects
 js/render.js            HUD overlay and banners; also the 2D fallback renderer
+js/aim.js               point-and-click passing overlay (arc, reticle, power ring)
 js/vendor/three.bundle.js  three.js r160 (MIT license, see js/vendor/THREE-LICENSE.txt)
 js/audio.js             WebAudio sound and speech announcer
 js/input.js             keyboard, gamepad and touch input

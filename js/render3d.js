@@ -1020,6 +1020,17 @@
     return { x: (tmpV.x + 1) / 2 * this.W, y: (1 - tmpV.y) / 2 * this.H };
   };
 
+  // CSS pixel -> point on the turf (game coords), or null above the horizon.
+  R.groundAt = function (sx, sy) {
+    var c = this.camera;
+    tmpV.set(sx / this.W * 2 - 1, 1 - sy / this.H * 2, 0.5).unproject(c);
+    var dx = tmpV.x - c.position.x, dy = tmpV.y - c.position.y, dz = tmpV.z - c.position.z;
+    if (dy > -1e-4) return null;
+    var t = -c.position.y / dy;
+    return { x: c.position.x + dx * t, y: c.position.z + dz * t };
+  };
+  R.drawAim = function (g, ui) { if (FB.drawAim) FB.drawAim(this.hud.ctx, this, g, ui); };
+
   R.drawTags = function (g) {
     var ctx = this.hud.ctx, self = this;
     g.players.forEach(function (p) {

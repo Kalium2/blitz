@@ -20,6 +20,7 @@ canvas#game, canvas#game3d { position: fixed; inset: 0; width: 100vw; height: 10
 body.gl canvas#game { pointer-events: none; z-index: 1; }
 canvas#game3d { z-index: 0; }
 body:not(.gl) canvas#game3d { display: none; }
+body.aiming canvas#game, body.aiming canvas#game3d { cursor: none; }
 
 button, a.menu-item { font: inherit; color: inherit; }
 

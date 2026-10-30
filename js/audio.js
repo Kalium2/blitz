@@ -172,6 +172,12 @@
           break;
         case 'kick': this.tone('sine', 180, 55, 0.14, 0.9); this.noise(0.05, 2500, 0.45, 'bandpass', 0, this.crunch); break;
         case 'throw': this.sweep(0.22, 900, 3200, 0.22); break;
+        case 'zone': this.tone('square', 1320, 1760, 0.06, 0.06); break;
+        case 'perfect':
+          // bright arcade chime for a perfect release
+          [1047, 1319, 1568, 2093].forEach(function (f, i) { self.tone('square', f, f, 0.09, 0.07, i * 0.045); });
+          this.sweep(0.25, 2000, 6000, 0.12);
+          break;
         case 'bullet': this.sweep(0.16, 1500, 5200, 0.3); this.tone('sawtooth', 300, 900, 0.1, 0.04); break;
         case 'catch': this.tone('sine', 260, 120, 0.07, 0.55); this.noise(0.05, 1600, 0.45, 'bandpass', 0, null, 1.2); break;
         case 'snap': this.tone('triangle', 220, 110, 0.07, 0.5); this.noise(0.04, 900, 0.3); break;

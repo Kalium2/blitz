@@ -281,7 +281,9 @@
       }
       var g = this.mode === 'game' ? this.game : this.demo;
       if (!g) return;
-      if (this.replay) { this.stepReplay(dt, inputs); return; }
+      if (this.replay) { this.aimUI = null; this.setAimCursor(false); this.stepReplay(dt, inputs); return; }
+      if (this.mode === 'game') this.pointerAim(g, dt, inputs);
+      else this.aimUI = null;
       var blocked = this.paused || (this.mode === 'game' && (UI.isOpen('howto')));
       // game feel: hit-stop and slow motion on big moments
       var simDt = dt;
@@ -292,15 +294,18 @@
         this.acc += simDt;
         var h = 1 / 60, n = 0;
         var gameInputs = this.mode === 'game' && !UI.ps && !UI.isOpen('pat') ? inputs : [];
+        // edges only count once; the pointer aim carries over without its release
+        var noEdges = function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false, aim: i.aim ? { x: i.aim.x, y: i.aim.y, power: i.aim.power } : null }; };
         if (menuOwnedInput && gameInputs.length) gameInputs = gameInputs.map(function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false }; });
         if (this.renderer.heading && g.phase === 'live') g.camHeading = this.renderer.heading(); else g.camHeading = null;
         while (this.acc >= h && n < 6) {
           g.cpuStep(h);
           g.update(h, gameInputs);
-          // edge-triggered buttons only count once
-          if (gameInputs.length) gameInputs = gameInputs.map(function (i) { return { x: i.x, y: i.y, turbo: i.turbo, action: false, special: false, start: false }; });
+          if (gameInputs.length) gameInputs = gameInputs.map(noEdges);
           this.acc -= h; n++;
         }
+        // a release that landed on a frame with no sim step waits for the next one
+        if (n > 0 && this.aim) this.aim.pending = null;
         if (n === 6) this.acc = 0;
         this.handleEvents(g);
         if (this.mode === 'game') {
@@ -318,6 +323,7 @@
         } else if (g.over) this.startDemo();
       }
       this.renderer.render(g, blocked ? 0 : (simDt > 0 ? Math.max(simDt, dt * 0.25) : 0));
+      if (this.mode === 'game' && this.renderer.drawAim) this.renderer.drawAim(g, blocked ? null : this.aimUI);
       if (this.mode === 'game') {
         var touchOn = document.body.classList.contains('touch') && this.mode === 'game';
         this.renderer.drawHUD(g, { hint: this.mode === 'game' ? this.hint(g) : null, top: touchOn || this.mode === 'title' });
@@ -326,6 +332,63 @@
       if (g.phase === 'break' && g.breakMsg && this.mode === 'game') {
         // break messages are announced via events; nothing extra to draw
       }
+    },
+
+    // ------------------------------------------- point-and-click passing
+    // Press on the field to start a throw, release to let it go. A quick click
+    // is a normal pass; holding fills the power ring from lob to bullet, and
+    // releasing on the gold band is a PERFECT throw (much tighter accuracy).
+    // Hold too long and the throw wobbles. Right-click cancels.
+    pointerAim: function (g, dt, inputs) {
+      var TAP = 0.12, FILL = 0.7, GRACE = 0.15, ZONE = [0.8, 0.93];
+      var m = Input.pollMouse(), A = this.aim || (this.aim = { charging: false, t: 0, zoneHit: false, flash: 0, pending: null });
+      A.flash = Math.max(0, A.flash - dt);
+      var c = null;
+      g.ctl.forEach(function (k) { if (k.slot === 0) c = k; });
+      var pl = c && c.pl, b = g.ball;
+      var menu = this.paused || !!UI.ps || UI.isOpen('pat') || !!UI.top();
+      var spot = m.on ? this.renderer.groundAt(m.sx, m.sy) : null;
+      var canAim = !menu && !!spot && g.phase === 'live' && !!pl && b.state === 'held' && b.holder === pl && g.canPass(pl);
+      var ui = { active: false, flash: A.flash, fx: A.fx, fy: A.fy };
+      this.aimUI = ui;
+      this.setAimCursor(canAim);
+      if (!canAim) {
+        A.charging = false; A.pending = null;
+        // elsewhere a click is the Action button (snap, switch, dive, spin) and right-click is Special
+        if (!menu && m.pressed) inputs[0].action = true;
+        if (!menu && m.right) inputs[0].special = true;
+        return;
+      }
+      if (m.pressed) { A.charging = true; A.t = 0; A.zoneHit = false; }
+      if (m.right) {
+        if (A.charging) { A.charging = false; Audio.play('menu'); }
+        else inputs[0].special = true;
+      }
+      if (A.charging) A.t += dt;
+      var fill = Math.max(0, Math.min(1, (A.t - TAP) / FILL));
+      var over = A.charging ? Math.max(0, A.t - TAP - FILL - GRACE) : 0;
+      var inZone = fill >= ZONE[0] && fill <= ZONE[1];
+      if (A.charging && inZone && !A.zoneHit) { A.zoneHit = true; Audio.play('zone'); }
+      var tap = A.t < TAP;
+      var power = !A.charging || tap ? 0.5 : fill;
+      if (A.charging && (m.released || !m.down)) {
+        var perfect = !tap && inZone;
+        A.pending = { power: power, perfect: perfect, accMul: perfect ? 0.3 : over > 0 ? 1 + Math.min(1.6, over * 3) : 1 };
+        A.charging = false;
+        if (perfect) { A.flash = 0.5; A.fx = m.sx; A.fy = m.sy; }
+      }
+      var P = A.pending;
+      inputs[0].aim = { x: spot.x, y: spot.y, power: P ? P.power : power, release: !!P, accMul: P ? P.accMul : 1, perfect: P ? P.perfect : false };
+      // preview every frame (not just on sim steps) so it tracks the pointer through hit-stop
+      ui.plan = g.planPass(pl, spot, inputs[0].aim.power, null, true);
+      ui.active = true; ui.sx = m.sx; ui.sy = m.sy; ui.charging = A.charging; ui.tap = tap; ui.fill = fill; ui.over = over; ui.zone = ZONE;
+      ui.flash = A.flash; ui.fx = A.fx; ui.fy = A.fy;
+    },
+
+    setAimCursor: function (on) {
+      if (this.aimCursor === on) return;
+      this.aimCursor = on;
+      document.body.classList.toggle('aiming', on);
     },
 
     slotForTeam: function (team) {
@@ -384,7 +447,8 @@
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
-          if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return 'AIM + ' + A + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
+          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  HOLD + RELEASE ON GOLD: PERFECT THROW  \u2022  RIGHT-CLICK: CANCEL';
+          if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
         if (b.state === 'air' && b.kind === 'pass') return S + ': JUMP FOR THE BALL';
@@ -488,7 +552,16 @@
           case 'lateral': R.banner('LATERAL!', { big: false, dur: 1.0 }); if (sfx) { Audio.play('throw'); Audio.call('lateral'); } break;
           case 'stiff': if (sfx) { Audio.play('hit'); if (Math.random() < 0.4) Audio.call('stiff'); } if (!demo && Math.random() < 0.35) R.banner('STIFF ARM!', { big: false, dur: 0.9 }); break;
           case 'snap': if (sfx) { Audio.play('snap'); if (Math.random() < 0.5) Audio.call('hut'); } break;
-          case 'throw': if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw'); if (R.notify) R.notify('throw', d); break;
+          case 'throw':
+            if (sfx) Audio.play(g.ball && g.ball.bullet ? 'bullet' : 'throw');
+            if (R.notify) R.notify('throw', d);
+            if (d.perfect) {
+              if (sfx) Audio.play('perfect');
+              if (d.p) R.burst(d.p.x, d.p.y, 1.9, 22, ['#ffd23a', '#ffffff', '#ff9a1f'], 5, 0.09);
+              self.hitstop = Math.max(self.hitstop, 0.05);
+              Input.rumble(0.3, 0.6, 90);
+            }
+            break;
           case 'kick': if (sfx) Audio.play('kick'); break;
           case 'catch':
             if (sfx) { Audio.play('catch'); Audio.roar(0.25, 1.4); }
