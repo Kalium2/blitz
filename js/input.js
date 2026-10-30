@@ -13,12 +13,12 @@
     solo: {
       up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
       action: ['Space', 'KeyJ'], turbo: ['ShiftLeft', 'ShiftRight', 'KeyK'], special: ['KeyL', 'KeyE'], start: ['Escape', 'Enter', 'KeyP'],
-      rec: [['Digit1', 'Numpad1'], ['Digit2', 'Numpad2'], ['Digit3', 'Numpad3'], ['Digit4', 'Numpad4']]
+      rec: [['Digit1', 'Numpad1'], ['Digit2', 'Numpad2'], ['Digit3', 'Numpad3'], ['Digit4', 'Numpad4']], timeout: ['KeyT']
     },
     p1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['Space'], turbo: ['ShiftLeft'], special: ['KeyE'], start: ['Escape'],
-      rec: [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4']] },
+      rec: [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4']], timeout: ['KeyT'] },
     p2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], action: ['Numpad0', 'Slash'], turbo: ['NumpadDecimal', 'Period'], special: ['NumpadEnter', 'Comma'], start: ['Enter'],
-      rec: [['Numpad1'], ['Numpad2'], ['Numpad3'], ['Numpad4']] }
+      rec: [['Numpad1'], ['Numpad2'], ['Numpad3'], ['Numpad4']], timeout: ['NumpadSubtract'] }
   };
 
   var Input = {
@@ -98,7 +98,7 @@
       var held = false, k = this.keys, self = this;
       ['solo', 'p1', 'p2'].forEach(function (m) {
         var map = KEYMAPS[m];
-        ['action', 'turbo', 'special', 'start'].forEach(function (b) { map[b].forEach(function (c) { if (k[c]) held = true; }); });
+        ['action', 'turbo', 'special', 'start', 'timeout'].forEach(function (b) { map[b].forEach(function (c) { if (k[c]) held = true; }); });
         map.rec.forEach(function (keys) { keys.forEach(function (c) { if (k[c]) held = true; }); });
       });
       var pads = navigator.getGamepads ? navigator.getGamepads() : [];
@@ -113,7 +113,7 @@
       return {
         x: (any(map.right) ? 1 : 0) - (any(map.left) ? 1 : 0),
         y: (any(map.up) ? 1 : 0) - (any(map.down) ? 1 : 0),
-        action: any(map.action), turbo: any(map.turbo), special: any(map.special), start: any(map.start),
+        action: any(map.action), turbo: any(map.turbo), special: any(map.special), start: any(map.start), timeout: any(map.timeout),
         // receiver icon key held (1-4), 0 for none
         rec: map.rec ? map.rec.reduce(function (r, keys, i) { return r || (any(keys) ? i + 1 : 0); }, 0) : 0
       };
@@ -131,7 +131,7 @@
       if (Math.abs(ay) < 0.25) ay = 0;
       var x = ax + (b(15) ? 1 : 0) - (b(14) ? 1 : 0);
       var y = -ay + (b(12) ? 1 : 0) - (b(13) ? 1 : 0);
-      var st = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), action: b(0), special: b(1) || b(3), turbo: b(2) || b(5) || b(7) || b(4) || b(6), start: b(9) };
+      var st = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), action: b(0), special: b(1) || b(3), turbo: b(2) || b(5) || b(7) || b(4) || b(6), start: b(9), timeout: b(8) };
       if (st.action || st.special || st.turbo || st.start || st.x || st.y) this.lastDevice = 'gamepad';
       // aiming with the stick hands passing back from the pointer
       if (st.x || st.y) this.mouse.on = false;
@@ -143,7 +143,7 @@
       return {
         x: Math.max(-1, Math.min(1, a.x + b.x)), y: Math.max(-1, Math.min(1, a.y + b.y)),
         action: a.action || b.action, turbo: a.turbo || b.turbo, special: a.special || b.special, start: a.start || b.start,
-        rec: a.rec || b.rec || 0
+        rec: a.rec || b.rec || 0, timeout: a.timeout || b.timeout
       };
     },
 
@@ -167,6 +167,7 @@
           x: r.x, y: r.y, turbo: r.turbo, actionHeld: r.action,
           action: r.action && !p.action, special: r.special && !p.special, start: r.start && !p.start,
           rec: r.rec && r.rec !== p.rec ? r.rec : 0,
+          timeout: r.timeout && !p.timeout,
           // menu navigation edges
           navX: (r.x > 0.5 && !(p.x > 0.5)) ? 1 : (r.x < -0.5 && !(p.x < -0.5)) ? -1 : 0,
           navY: (r.y > 0.5 && !(p.y > 0.5)) ? 1 : (r.y < -0.5 && !(p.y < -0.5)) ? -1 : 0,

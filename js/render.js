@@ -667,7 +667,12 @@
       ctx.restore();
       ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
       ctx.font = font('italic 900', compact ? 18 : 22);
-      ctx.fillText(t.abbr, x + 12, by + bh / 2);
+      ctx.fillText(t.abbr, x + 12, by + bh / 2 - 3);
+      // timeouts left this half
+      if (g.timeouts) for (var k = 0; k < 3; k++) {
+        ctx.fillStyle = k < g.timeouts[i] ? '#ffd23a' : 'rgba(255,255,255,0.22)';
+        ctx.fillRect(x + 12 + k * 13, by + bh - 11, 10, 3);
+      }
       if (g.fire[i]) { ctx.font = '15px sans-serif'; ctx.fillText('🔥', x + teamW - 26, by + bh / 2); }
       if (g.poss === i && g.phase !== 'final') {
         ctx.fillStyle = '#ffd23a'; ctx.beginPath(); ctx.moveTo(x + teamW - 6, by + 8); ctx.lineTo(x + teamW - 6, by + bh - 8); ctx.lineTo(x + teamW - 12, by + bh / 2); ctx.fill();

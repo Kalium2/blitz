@@ -841,6 +841,205 @@
     return tp;
   };
 
+  // ===================================================== halftime show
+  // The home team's cheer squad: six in shells and skirts with pom-poms and
+  // two stunt bases, all built from primitives in the team's colours.
+  var HAIR = ['#2a1a10', '#6b3f1f', '#c8a060', '#111111', '#8a2c14'];
+  var CGEO = null;
+  function cheerGeos() {
+    if (CGEO) return CGEO;
+    CGEO = {
+      torso: lathe([[0, -0.02], [0.12, -0.02], [0.125, 0.12], [0.15, 0.3], [0.14, 0.42], [0.09, 0.5], [0, 0.51]], 20, 1.2, 0.8),
+      skirt: lathe([[0.13, 0.04], [0.16, -0.06], [0.27, -0.27], [0.26, -0.29], [0.0, -0.29]], 18),
+      band: lathe([[0.255, -0.24], [0.27, -0.27], [0.255, -0.29]], 18),
+      shorts: lathe([[0, 0.05], [0.14, 0.04], [0.16, -0.08], [0.15, -0.16], [0, -0.17]], 16, 1.25, 0.85),
+      thigh: lathe([[0, 0.02], [0.075, 0.0], [0.08, -0.12], [0.065, -0.3], [0.055, -0.44], [0, -0.45]], 14),
+      shin: lathe([[0, 0.02], [0.055, 0.0], [0.06, -0.12], [0.045, -0.3], [0.038, -0.4], [0, -0.41]], 12),
+      shoe: new T.RoundedBoxGeometry(0.1, 0.08, 0.24, 2, 0.03),
+      upper: new T.CapsuleGeometry(0.042, 0.22, 4, 8),
+      fore: new T.CapsuleGeometry(0.036, 0.2, 4, 8),
+      head: new T.SphereGeometry(0.105, 18, 14),
+      hair: new T.SphereGeometry(0.115, 18, 12, 0, TAU, 0, Math.PI * 0.55),
+      tail: new T.CapsuleGeometry(0.04, 0.18, 4, 8),
+      bow: new T.TorusGeometry(0.035, 0.014, 6, 12),
+      eye: new T.SphereGeometry(0.012, 8, 6),
+      pom: new T.IcosahedronGeometry(0.13, 1),
+      neck: lathe([[0.045, 0], [0.048, 0.08]], 10)
+    };
+    return CGEO;
+  }
+
+  function CheerModel(mats, idx, base) {
+    var G = cheerGeos(), self = this;
+    this.root = new T.Group();
+    this.base = base;
+    this.hips = grp(this.root, 0, 0.92, 0);
+    this.parts = { top: [], trim: [], bottom: [], skin: [], pom: [], pom2: [] };
+    var P = this.parts;
+    var add = function (kind, geo, parent, x, y, z) { var m = mesh(geo, mats.shoe, parent, x, y, z); P[kind].push(m); return m; };
+    if (base) add('bottom', G.shorts, this.hips, 0, 0.02, 0).scale.set(1, 1, 1);
+    else { add('top', G.skirt, this.hips, 0, 0, 0); add('trim', G.band, this.hips, 0, 0, 0); }
+    this.legs = [-1, 1].map(function (s) {
+      var th = grp(self.hips, 0.08 * s, -0.04, 0);
+      add(base ? 'bottom' : 'skin', G.thigh, th, 0, 0, 0);
+      var kn = grp(th, 0, -0.44, 0);
+      add(base ? 'bottom' : 'skin', G.shin, kn, 0, 0, 0);
+      mesh(G.shoe, mats.sole, kn, 0, -0.42, 0.05);
+      return { th: th, kn: kn };
+    });
+    this.spine = grp(this.hips, 0, 0.04, 0);
+    add('top', G.torso, this.spine, 0, 0, 0);
+    var stripe = add('trim', new T.BoxGeometry(0.3, 0.035, 0.2), this.spine, 0, 0.36, 0.005); stripe.rotation.z = 0;
+    add('skin', G.neck, this.spine, 0, 0.48, 0);
+    this.head = grp(this.spine, 0, 0.64, 0);
+    add('skin', G.head, this.head, 0, 0, 0);
+    var hairMat = new T.MeshStandardMaterial({ color: HAIR[idx % HAIR.length], roughness: 0.7 });
+    mesh(G.hair, hairMat, this.head, 0, 0.012, -0.012).scale.set(1, 1, 1.05);
+    if (!base) {
+      var tail = mesh(G.tail, hairMat, this.head, 0, 0.02, -0.14); tail.rotation.x = 0.6;
+      this.tail = tail;
+      add('trim', G.bow, this.head, 0, 0.09, -0.1);
+    }
+    [-1, 1].forEach(function (s) { mesh(G.eye, mats.eye, self.head, 0.035 * s, 0.01, 0.097); });
+    this.arms = [-1, 1].map(function (s) {
+      var sh = grp(self.spine, 0.17 * s, 0.42, 0);
+      var up = add(base ? 'top' : 'skin', G.upper, sh, 0, -0.14, 0);
+      var el = grp(sh, 0, -0.29, 0);
+      add('skin', G.fore, el, 0, -0.12, 0);
+      var hand = grp(el, 0, -0.27, 0);
+      if (!base) {
+        var pm = mesh(G.pom, null, hand, 0, -0.04, 0);
+        P[s < 0 ? 'pom' : 'pom2'].push(pm);
+      }
+      return { sh: sh, el: el, hand: hand };
+    });
+    this.skinIdx = idx;
+  }
+  CheerModel.prototype.setTeam = function (team, mats) {
+    var m = mats.team(team), P = this.parts;
+    var sk = mats.skin[(this.skinIdx * 2 + 1) % mats.skin.length];
+    var top = team.c.jersey === '#F4F4F4' ? m.trim : m.jersey;
+    P.top.forEach(function (x) { x.material = top; });
+    P.trim.forEach(function (x) { x.material = team.c.jersey === '#F4F4F4' ? m.jersey : m.trim; });
+    P.bottom.forEach(function (x) { x.material = m.pants; });
+    P.skin.forEach(function (x) { x.material = sk; });
+    if (!mats.pom[team.abbr]) {
+      var mk = function (c) { return new T.MeshStandardMaterial({ color: c, roughness: 0.35, metalness: 0.45, flatShading: true, emissive: c, emissiveIntensity: 0.18 }); };
+      mats.pom[team.abbr] = [mk(team.c.jersey === '#F4F4F4' ? team.c.trim : team.c.jersey), mk(team.c.trim)];
+    }
+    var pm = mats.pom[team.abbr];
+    P.pom.forEach(function (x) { x.material = pm[0]; });
+    P.pom2.forEach(function (x) { x.material = pm[1]; });
+    this.teamAbbr = team.abbr;
+  };
+  // pose: arms {up: raise sideways 0..PI, fwd: raise forward, el: elbow bend}, legs {kick, knee}, spin, hop
+  CheerModel.prototype.pose = function (q) {
+    var self = this;
+    [0, 1].forEach(function (i) {
+      var s = i ? 1 : -1, a = q.arms[i], l = q.legs[i];
+      self.arms[i].sh.rotation.set(-(a.fwd || 0), 0, s * (a.up || 0));
+      self.arms[i].el.rotation.set(-(a.el || 0), 0, 0);
+      self.legs[i].th.rotation.set(-(l.kick || 0), 0, s * (l.out || 0));
+      self.legs[i].kn.rotation.set(l.knee || 0, 0, 0);
+    });
+    this.hips.position.y = 0.92 - (q.crouch || 0) * 0.3;
+    this.spine.rotation.x = q.lean || 0;
+    if (this.tail) this.tail.rotation.x = 0.6 + (q.flip || 0);
+  };
+
+  // Choreography over the show (t in seconds of a 10 s show).
+  function cheerPose(t, i, n) {
+    var ph = t * 5.2 + i * 0.6, q = { arms: [{}, {}], legs: [{}, {}], crouch: 0, lean: 0 };
+    var beat = Math.sin(t * Math.PI * 2 * 1.1);
+    if (t < 2.6) {
+      // pom wave: alternating high V / low V, hips sway
+      var hi = Math.sin(ph) > 0;
+      q.arms[0] = { up: hi ? 2.5 : 0.6, el: 0.1 }; q.arms[1] = { up: hi ? 0.6 : 2.5, el: 0.1 };
+      q.legs[0] = { knee: 0.15 + Math.max(0, beat) * 0.3, kick: Math.max(0, beat) * 0.2 }; q.legs[1] = { knee: 0.15 + Math.max(0, -beat) * 0.3, kick: Math.max(0, -beat) * 0.2 };
+      q.crouch = 0.08 + Math.abs(beat) * 0.08;
+    } else if (t < 5.0) {
+      // kick line: arms straight out, a ripple of high kicks down the line
+      var k = (t - 2.6) * 3.2 - i * 0.35, leg = Math.floor(k) % 2 ? 1 : 0, up = Math.max(0, Math.sin(k * Math.PI));
+      q.arms[0] = { up: 1.5, el: 0 }; q.arms[1] = { up: 1.5, el: 0 };
+      q.legs[leg] = { kick: up * 2.1, knee: (1 - up) * 0.4 }; q.legs[1 - leg] = { knee: 0.08 };
+      q.lean = -up * 0.15;
+    } else if (t < 7.0) {
+      // V formation with a spin and a clap overhead
+      var c = Math.sin((t - 5) * Math.PI * 4);
+      q.arms[0] = { up: 2.6 + c * 0.3, el: 0.3 + c * 0.3 }; q.arms[1] = { up: 2.6 + c * 0.3, el: 0.3 + c * 0.3 };
+      q.legs[0] = { knee: 0.2 }; q.legs[1] = { knee: 0.2, out: 0.15 };
+    } else if (t < 9.0) {
+      // toe-touch jumps in a wave
+      var jt = ((t - 7) * 1.4 - i * 0.08) % 1, air = jt > 0 && jt < 0.45 ? Math.sin(jt / 0.45 * Math.PI) : 0;
+      q.arms[0] = { up: 1.4 + air * 0.4, fwd: air * 0.6 }; q.arms[1] = { up: 1.4 + air * 0.4, fwd: air * 0.6 };
+      q.legs[0] = { kick: air * 1.4, out: air * 0.9, knee: (1 - air) * 0.5 }; q.legs[1] = { kick: air * 1.4, out: air * 0.9, knee: (1 - air) * 0.5 };
+      q.crouch = air ? 0 : 0.25; q.hop = air * 1.1;
+    } else {
+      // final: high V, poms shaking
+      var sh = Math.sin(t * 40) * 0.12;
+      q.arms[0] = { up: 2.45 + sh, el: 0 }; q.arms[1] = { up: 2.45 - sh, el: 0 };
+      q.legs[0] = { knee: 0.05 }; q.legs[1] = { kick: 0.2, knee: 0.6 };
+    }
+    return q;
+  }
+  function easeIO(k) { k = clamp(k, 0, 1); return k * k * (3 - 2 * k); }
+
+  R.updateHalftime = function (g, dt) {
+    var H = g.halftime, self = this;
+    if (!H) { if (this.squad) this.squad.forEach(function (c) { c.root.visible = false; }); if (this.htWas) { this.htWas = false; this.cam.init = false; } return false; }
+    this.htWas = true;
+    var team = g.teams[H.team], n = 8;
+    if (!this.squad) {
+      this.mats.pom = this.mats.pom || {};
+      this.squad = [];
+      for (var i = 0; i < n; i++) { var c = new CheerModel(this.mats, i, i === 3 || i === 4); this.scene.add(c.root); this.squad.push(c); }
+    }
+    // the show runs on a 10 s timeline whatever the game speed
+    var t = H.t / H.len * 10, cx = 50, cy = MID;
+    this.models.forEach(function (m) { m.root.visible = false; });
+    this.ball.visible = false;
+    [this.losLine, this.fdLine, this.targetRing, this.landRing, this.token].concat(this.ctlRings, this.ctlDiscs).forEach(function (o) { if (o) o.visible = false; });
+    this.squad.forEach(function (c, i) {
+      c.root.visible = true;
+      if (c.teamAbbr !== team.abbr) c.setTeam(team, self.mats);
+      // formations: a line across the 50, then a V pointing at the home sideline
+      var lineX = cx + (i - (n - 1) / 2) * 1.6, lineY = cy;
+      var off = Math.abs(i - (n - 1) / 2), vX = cx + (i - (n - 1) / 2) * 1.3, vY = cy + off * 1.1 - 2;
+      var k = easeIO((t - 5) / 0.8) - easeIO((t - 9) / 0.6) * 0.5;
+      var x = lerp(lineX, vX, k), y = lerp(lineY, vY, k);
+      // run-in from the home sideline over the first second
+      var runIn = easeIO(t / 1.1);
+      y = lerp(cy - 14, y, runIn);
+      var q = cheerPose(t, i, n);
+      if (t < 1.1) { var st = Math.sin(t * 16 + i); q = { arms: [{ up: 0.4, fwd: st * 0.6 }, { up: 0.4, fwd: -st * 0.6 }], legs: [{ kick: st * 0.7, knee: 0.5 }, { kick: -st * 0.7, knee: 0.5 }], lean: 0.15 }; }
+      // face the home sideline, where the show's camera starts
+      var hop = q.hop || 0, yaw = Math.PI;
+      // the stunt: the two bases toss the middle flyer straight up during the jumps
+      if (c.base && t > 7 && t < 9) { q.arms[0] = { fwd: 2.6 - Math.sin(Math.min(1, (t - 7) * 2) * Math.PI) * 0.8 }; q.arms[1] = q.arms[0]; q.crouch = 0.25; hop = 0; }
+      var spin = t > 5.4 && t < 6.2 ? easeIO((t - 5.4) / 0.8) * TAU : 0;
+      c.root.position.set(x, hop, y);
+      c.root.rotation.y = yaw + spin;
+      c.pose(q);
+    });
+    // flyer: whoever stands between the bases
+    var fl = this.squad[2];
+    if (t > 7.1 && t < 8.7) {
+      var ft = (t - 7.1) / 1.6, base = this.squad[3].root.position, base2 = this.squad[4].root.position;
+      var into = easeIO(ft * 5);
+      fl.root.position.set(lerp(fl.root.position.x, (base.x + base2.x) / 2, into), Math.sin(ft * Math.PI) * 3.2, lerp(fl.root.position.z, (base.z + base2.z) / 2, into));
+      fl.pose({ arms: [{ up: 2.5 }, { up: 2.5 }], legs: [{ kick: 1.5, out: 1.0 }, { kick: 1.5, out: 1.0 }], lean: -0.2 });
+    }
+    if (!this.htBurst && t > 9.1) { this.htBurst = true; this.confetti(cx, cy - 1, [team.c.jersey, team.c.trim, '#ffffff']); this.cheer(1); }
+    if (t < 0.2) this.htBurst = false;
+    this.crowdTarget = 0.5;
+    // camera: a slow crane orbit around the squad, starting from the home side
+    var ang = -Math.PI / 2 - 0.5 + t * 0.1, rad = 12 - Math.sin(t * 0.3) * 2, hgt = 3.0 + Math.sin(t * 0.4) * 1.2;
+    this.camera.position.set(cx + Math.cos(ang) * rad, hgt, cy + Math.sin(ang) * rad);
+    this.camera.lookAt(cx, 1.2, cy - 0.5);
+    this.key.position.set(cx + 25, 60, cy + 35); this.key.target.position.set(cx, 0, cy);
+    return true;
+  };
+
   // ------------------------------------------------------------- frame
   R.render = function (g, dt) {
     this.time += dt;
@@ -851,6 +1050,7 @@
     this.updatePlayers(g, dt);
     this.updateBall(g, dt);
     this.updateMarkers(g);
+    this.updateHalftime(g, dt);
     this.updateJumbo(g);
     this.ribbonTex.offset.x = (this.ribbonTex.offset.x + dt * 0.02) % 1;
     this.crowdUniforms.uTime.value = this.time;

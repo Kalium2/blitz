@@ -20,6 +20,8 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 - **Smarter teammates:** hot routes against blitzes, a scramble drill when the QB extends the play, and lead blocking for the ball carrier.
 - **Instant replay** of big plays (touchdowns, interceptions, onside recoveries, 25+ yard gains) from a low sideline camera.
 - **Extras:** big heads, infinite turbo, weather (rain, snow, fog, random; rain and snow affect footing, throwing and catching) and a secret, fully fictional team unlocked with a code on the title screen.
+- **Football clock rules**, scaled to the quarter length: the clock keeps running after in-bounds plays (a play clock's worth in the huddle, then while the offense is at the line) and stops for incompletions, scores, turnovers, kicks, timeouts and change of possession, and for out of bounds late in a half. Two-minute warning in the 2nd and 4th quarters (half the quarter for quarters under 4 minutes). Three timeouts per team per half (two in overtime), shown under each team in the score bug; the CPU uses its timeouts late when it needs time.
+- **Halftime show:** the home team's cheerleaders perform a ten-second routine (kick line, V formation, a basket toss and a pom finale) to an original drumline beat. Press Action to skip it.
 - Final screen shows passing, rushing, receiving and defensive leaders. Kickoffs, extra points, 2-point tries, safeties, touchbacks, interceptions, fumbles and sudden-death overtime.
 - Sound: field sounds (padded hits, catches, cleats, jersey rustles, referee whistles, a stadium bed and crowd swells) come from an original synthesized sample pack in `assets/audio`, layered with arcade stingers, an original menu music loop and a hype announcer with varied calls (browser speech). Every sound also has a synthesized fallback in code. The downloaded copy plays the samples too (through `<audio>`, since browsers block loading files into WebAudio from `file://`).
 - Graphics quality is picked automatically (HIGH: bloom, MSAA, 2K shadows, full crowd; LOW: lighter settings for phones and older machines) and can be changed in **Options**. Browsers without WebGL fall back to a 2D renderer.
@@ -33,6 +35,8 @@ An arcade 7-on-7 football game for the browser, in the spirit of **NFL Blitz**: 
 | Turbo | Shift / K | Left Shift | Num `.` or `.` | X / RB / RT |
 | Special (hurdle, jump for ball) | E / L | E | Num Enter or `,` | B / Y |
 | Pause | Esc / P | Esc | Enter | Start |
+| Timeout | T | T | Num `-` | Back / Select |
+| Receiver icons / hot routes | 1-4 | 1-4 | Num 1-4 | (click or tap the icon) |
 
 Before the snap on a pass play, press **1-4** (WR1, WR2, TE, RB) or click a receiver's numbered icon to cycle his **hot route** (GO, SLANT, OUT, CURL, IN, FLAT, then back to the called route); the play's routes are drawn on the field until the snap. After the snap, press a receiver's number (or click his icon) to throw to him; the icon's ring shows how open he is. Player 2 uses numpad 1-4. To pass with the mouse, point at a receiver (or any spot) and click; hold and release on the gold band of the power ring for a perfect throw, right-click to cancel. Elsewhere a left click works as Action (snap, switch, dive) and a right click as Special. With a keyboard or gamepad, point the stick at a receiver and press Action; with the stick centered, the ball goes to the most open receiver, marked by the pulsing ring.
 

@@ -65,6 +65,10 @@
     this.score = [0, 0];
     this.quarter = 1;
     this.clock = this.qLen;
+    this.clockRun = false;          // does the clock keep running between plays?
+    this.timeouts = [3, 3];
+    this.toPending = [false, false];
+    this.warned = false;            // two-minute warning given this half
     this.fire = [false, false];
     this.offStreak = [0, 0];
     this.defStreak = [0, 0];
@@ -578,7 +582,12 @@
       case 'anim': this.updateAnim(dt, inputs); break;
       case 'break':
         this.breakT -= dt;
-        if (this.breakT <= 0) this.afterBreak();
+        if (this.halftime) {
+          this.halftime.t += dt;
+          // any human can skip the show after a moment
+          if (this.halftime.t > 1.5 && inputs.some(function (i) { return i && i.action; })) this.breakT = 0;
+        }
+        if (this.breakT <= 0) { this.halftime = null; this.afterBreak(); }
         break;
       case 'select':
         if (this.selectWait > 0) this.selectWait -= dt;
@@ -603,6 +612,12 @@
   G.updatePresnap = function (dt, inputs) {
     var self = this;
     this.snapTimer -= dt;
+    // a running clock keeps going while the offense is at the line
+    if (this.clockRun && this.playType !== 'kickoff') {
+      this.tickClock(dt);
+      if (this.warnPending) { this.warnPending = false; this.clockRun = false; this.emit('twomin', { at: this.warnAt() }); }
+      if (this.clock <= 0) { this.clockRun = false; this.cadence = null; this.endQuarter(); return; }
+    }
     var callSnap = !!this.cadence && this.playType !== 'kickoff' && this.stepCadence(dt);
     // Humans: defense may move and cycle defenders, offense snaps.
     this.ctl.forEach(function (c) {
@@ -737,7 +752,7 @@
   G.updateLive = function (dt, inputs) {
     var self = this, b = this.ball;
     this.playT += dt;
-    if (!this.conversion) this.clock = Math.max(0, this.clock - dt);
+    this.tickClock(dt);
     if (this.kickRunT > 0) {
       this.kickRunT -= dt;
       var kk = this.kicker, ks = this.kickerStart, f = 1 - Math.max(0, this.kickRunT) / 0.55;
@@ -2140,7 +2155,8 @@
         this.newPossession(1 - o, spotX);
       }
     }
-    this.afterPlayClock(reason === 'tackle');
+    // in-bounds plays keep the clock running; out of bounds only stops it late in a half
+    this.afterPlayClock(reason === 'tackle' || (reason === 'oob' && !this.lateInHalf()));
   };
 
   G.creditYards = function (gained, td) {
@@ -2196,9 +2212,65 @@
     }
   };
 
-  G.afterPlayClock = function (runoff) {
-    if (runoff && this.clock > 0 && !this.conversion) this.clock = Math.max(0, this.clock - 3);
-    if (this.clock <= 0) { this.endQuarter(); return; }
+  // ======================================================== GAME CLOCK
+  // Football clock rules, scaled to the quarter length:
+  // - the clock runs during plays;
+  // - after an in-bounds play it keeps running through the huddle (a play
+  //   clock's worth) and while the offense is at the line;
+  // - it stops for incompletions, scores, turnovers, kicks, timeouts and
+  //   change of possession, and for out of bounds late in a half;
+  // - the two-minute warning (or half the quarter, for short quarters) stops it
+  //   in the 2nd and 4th quarters;
+  // - each team has three timeouts a half (two in overtime).
+  G.warnAt = function () { return Math.min(120, Math.round(this.qLen / 2)); };
+  G.lateInHalf = function () { return (this.quarter === 2 || this.quarter >= 4) && this.clock <= this.warnAt(); };
+  G.playClock = function () { return clamp(Math.round(this.qLen * 0.05), 4, 30); };
+
+  G.tickClock = function (dt) {
+    if (this.conversion) return;
+    var prev = this.clock, w = this.warnAt();
+    this.clock = Math.max(0, this.clock - dt);
+    if ((this.quarter === 2 || this.quarter === 4) && !this.warned && prev > w && this.clock <= w) {
+      this.warned = true; this.warnPending = true;
+      if (this.phase !== 'live') this.clock = w;
+    }
+  };
+
+  // A human calls a timeout (any time; it takes effect once the ball is dead).
+  G.callTimeout = function (team) {
+    if (this.timeouts[team] <= 0 || this.toPending[team] || this.over) return false;
+    if (this.phase === 'presnap' && this.playType !== 'kickoff') { this.useTimeout(team); return true; }
+    this.toPending[team] = true;
+    this.emit('timeoutcalled', { team: team });
+    return true;
+  };
+  G.useTimeout = function (team) {
+    this.timeouts[team]--; this.toPending[team] = false;
+    this.clockRun = false;
+    this.emit('timeout', { team: team, left: this.timeouts[team] });
+  };
+
+  // CPU clock management late in a half: the team that needs time stops the clock.
+  G.cpuTimeout = function () {
+    if (!this.clockRun || !this.lateInHalf()) return;
+    for (var t = 0; t < 2; t++) {
+      if (this.isHuman(t) || this.timeouts[t] <= 0 || this.attract) continue;
+      var behind = this.score[t] < this.score[1 - t];
+      if ((this.quarter >= 4 && behind) || (this.quarter === 2 && t === this.poss)) { this.useTimeout(t); return; }
+    }
+  };
+
+  G.afterPlayClock = function (running) {
+    this.clockRun = !!running && this.clock > 0 && !this.conversion;
+    for (var t = 0; t < 2; t++) if (this.toPending[t]) { if (this.clockRun) this.useTimeout(t); else this.toPending[t] = false; }
+    this.cpuTimeout();
+    if (this.warnPending) { this.warnPending = false; this.clockRun = false; this.clock = Math.max(this.clock, 0); this.emit('twomin', { at: this.warnAt() }); }
+    // the huddle: a play clock's worth runs off if the clock is running
+    if (this.clockRun) {
+      this.tickClock(this.playClock());
+      if (this.warnPending) { this.warnPending = false; this.clockRun = false; this.emit('twomin', { at: this.warnAt() }); }
+    }
+    if (this.clock <= 0) { this.clockRun = false; this.endQuarter(); return; }
     this.toSelect();
   };
 
@@ -2244,11 +2316,13 @@
 
   G.afterScore = function (team) {
     this.conversion = false;
+    this.clockRun = false; this.warnPending = false;
     if (this.clock <= 0) { this.pendingKick = team; this.endQuarter(); return; }
     this.setupKickoff(team);
   };
 
   G.afterSafety = function (team) {
+    this.clockRun = false; this.warnPending = false;
     if (this.clock <= 0) { this.pendingKick = team; this.endQuarter(); return; }
     this.setupKickoff(team);
   };
@@ -2258,6 +2332,7 @@
     if (q === 4 || q >= 5) {
       if (this.score[0] === this.score[1] && q === 4) {
         this.quarter = 5; this.ot = true; this.clock = Math.max(60, Math.round(this.qLen * 0.75));
+        this.clockRun = false; this.timeouts = [2, 2]; this.toPending = [false, false];
         this.breakMsg = 'OVERTIME'; this.phase = 'break'; this.breakT = 2.6; this.nextAfterBreak = 'otkick';
         this.emit('quarter', { q: 5, ot: true });
         return;
@@ -2267,8 +2342,17 @@
     }
     this.quarter++;
     this.clock = this.qLen;
+    this.clockRun = false; this.toPending = [false, false];
+    if (q === 2) { this.timeouts = [3, 3]; this.warned = false; }
     this.phase = 'break'; this.breakT = 2.4;
-    if (q === 2) { this.breakMsg = 'HALFTIME'; this.nextAfterBreak = 'half'; this.emit('half', {}); }
+    if (q === 2) {
+      this.breakMsg = 'HALFTIME'; this.nextAfterBreak = 'half';
+      // the home team's cheerleaders put on a ten second (real time) show
+      var len = 10 * (FB.GAME_SPEED || 1);
+      this.halftime = { t: 0, len: len, team: 0 };
+      this.breakT = len + 0.4;
+      this.emit('half', { show: true });
+    }
     else { this.breakMsg = 'END OF Q' + q; this.nextAfterBreak = this.pendingKick != null ? 'kick' : 'select'; this.emit('quarter', { q: this.quarter }); }
   };
 
