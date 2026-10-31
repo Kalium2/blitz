@@ -32,9 +32,11 @@
 
     init: function () {
       this.loadOpts();
+      var Dev = FB.Device;
+      Dev.tagBody();
       Input.init();
       this.canvas = document.getElementById('game');
-      var isTouchDev = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      var isTouchDev = Dev.mobile || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
       var lowEnd = isTouchDev || (navigator.hardwareConcurrency || 8) <= 4 || Math.min(screen.width, screen.height) < 500;
       this.quality = this.opts.gfx === 'auto' ? (lowEnd ? 'low' : 'high') : this.opts.gfx;
       this.renderer = FB.createRenderer3D ? FB.createRenderer3D(document.getElementById('game3d'), this.canvas, this.quality) : null;
@@ -59,15 +61,20 @@
       document.getElementById('roster-note').textContent = 'Rosters: ' + FB.ROSTER_DATE + '. Ratings are derived from fantasy points per game.';
       if (location.protocol === 'file:') document.getElementById('download-link').style.display = 'none';
       // touch support
-      var isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      var isTouch = Dev.mobile || ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
       if (isTouch) {
         document.body.classList.add('touch');
         Input.initTouch(document.getElementById('touch'));
       }
       // unlock audio on first interaction
+      // (on phones a touch only counts as a user gesture when it ends, so listen for that too)
       var unlock = function () { Audio.init(); if (self.mode !== 'game') Audio.startMusic(); };
       window.addEventListener('keydown', unlock, { once: true });
       window.addEventListener('pointerdown', unlock, { once: true });
+      ['touchend', 'pointerup'].forEach(function (ev) {
+        window.addEventListener(ev, function () { if (Audio.ctx && Audio.ctx.state === 'suspended') Audio.ctx.resume(); else if (!Audio.ctx) unlock(); }, { passive: true });
+      });
+      this.setupMobile(Dev);
       window.addEventListener('gamepadconnected', unlock);
       this.startDemo();
       requestAnimationFrame(function (t) { self.last = t; self.frame(t); });
@@ -138,6 +145,11 @@
         else if (action === 'options') { UI.show('options'); }
         else if (action === 'extras') { UI.show('extras'); }
         else if (action === 'create') { this.mode = 'create'; UI.openCreatePlay(); }
+        else if (action === 'install' && FB.Device.installPrompt) {
+          var ip = FB.Device.installPrompt;
+          ip.prompt();
+          if (ip.userChoice) ip.userChoice.then(function () { FB.Device.installPrompt = null; var it = document.getElementById('install-item'); if (it) it.hidden = true; });
+        }
       } else if (screen === 'extras') {
         if (action === 'bigheads') { o.bigHeads = !o.bigHeads; FB.cheats.bigHeads = o.bigHeads; }
         else if (action === 'infturbo') o.infTurbo = !o.infTurbo;
@@ -202,9 +214,10 @@
     // (this needs the tap that starts a game). iOS Safari ignores both; the
     // rotate screen covers that.
     goLandscape: function () {
-      // phones and small tablets only: a touchscreen laptop stays windowed
-      var phone = document.body.classList.contains('touch') && window.matchMedia && window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
-      if (!phone) return;
+      // phones and tablets only (a touchscreen laptop stays windowed); iPhone
+      // Safari has no page fullscreen, so it gets the home-screen tip instead
+      var Dev = FB.Device;
+      if (!Dev.mobile || Dev.standalone || !Dev.canFullscreen) return;
       var el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
       var lock = function () { try { var o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(function () {}); } catch (e) { /* unsupported */ } };
       try {
@@ -213,6 +226,39 @@
           if (r && r.then) r.then(lock).catch(function () {}); else lock();
         } else lock();
       } catch (e) { /* fullscreen is optional */ }
+    },
+
+    // Platform-specific setup: Android install button, iPhone home-screen tip,
+    // the detected device in Options, and notch insets for the HUD.
+    setupMobile: function (Dev) {
+      var self = this;
+      var note = document.getElementById('device-note');
+      if (note) note.textContent = 'Detected: ' + Dev.describe() + '.';
+      var inst = document.getElementById('install-item');
+      var showInstall = function () { if (inst) inst.hidden = !Dev.installPrompt; };
+      Dev.onInstallable = showInstall; showInstall();
+      window.addEventListener('appinstalled', function () { Dev.installPrompt = null; showInstall(); });
+      var tip = document.getElementById('ios-tip');
+      var dismissed = false;
+      try { dismissed = localStorage.getItem('fb26-ios-tip') === '1'; } catch (e) { /* storage unavailable */ }
+      if (tip && Dev.ios && !Dev.standalone && !dismissed) {
+        tip.hidden = false;
+        document.getElementById('ios-tip-close').addEventListener('click', function () {
+          tip.hidden = true;
+          try { localStorage.setItem('fb26-ios-tip', '1'); } catch (e) { /* storage unavailable */ }
+        });
+      }
+      // safe-area insets (the notch in landscape) for things drawn on the canvas
+      var probe = document.createElement('div');
+      probe.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+      document.body.appendChild(probe);
+      var readInsets = function () {
+        var cs = getComputedStyle(probe);
+        FB.safeArea = { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+      };
+      readInsets();
+      window.addEventListener('resize', readInsets);
+      window.addEventListener('orientationchange', function () { setTimeout(readInsets, 300); });
     },
 
     toTitle: function () {

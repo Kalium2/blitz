@@ -6,6 +6,12 @@
   <title>Football Blitz '26</title>
   <meta name="description" content="Football Blitz '26: an arcade 7-on-7 football game in the spirit of NFL Blitz, with 2026 NFL rosters rated from fantasy stats.">
   <meta name="theme-color" content="#07081a">
+  <!-- iPhone/iPad: run full screen when added to the home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Blitz '26">
+  <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -34,9 +40,15 @@
         <button class="menu-item" data-action="create">CREATE A PLAY</button>
         <button class="menu-item" data-action="extras">EXTRAS</button>
         <button class="menu-item" data-action="options">OPTIONS</button>
+        <button class="menu-item" data-action="install" id="install-item" hidden>INSTALL APP</button>
         <a class="menu-item" id="download-link" href="football-blitz.zip" download>DOWNLOAD GAME</a>
       </nav>
       <p class="press">USE ARROWS / WASD + SPACE &mdash; OR A GAMEPAD &mdash; OR TAP</p>
+      <div id="ios-tip" hidden>
+        <b>PLAY FULL SCREEN ON iPHONE</b>
+        <span>Tap <i class="share-ico" aria-label="Share"></i> Share, then <b>Add to Home Screen</b>, and open Blitz '26 from your home screen.</span>
+        <button id="ios-tip-close" aria-label="Dismiss">&times;</button>
+      </div>
     </div>
     <div class="demo-tag">CPU DEMO</div>
   </section>
@@ -199,6 +211,7 @@
         <button class="menu-item" data-action="back">BACK</button>
       </nav>
       <p class="note" id="roster-note"></p>
+      <p class="note" id="device-note"></p>
     </div>
   </section>
 
@@ -217,6 +230,7 @@
 
   <noscript><p class="noscript">Football Blitz needs JavaScript enabled.</p></noscript>
 
+  <script src="js/device.js"></script>
   <script src="js/vendor/three.bundle.js"></script>
   <script src="js/data/template.js"></script>
   <script src="js/data/teams.js"></script>

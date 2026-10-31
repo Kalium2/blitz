@@ -16,7 +16,9 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: var(--ui); -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
-canvas#game, canvas#game3d { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+canvas#game, canvas#game3d { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; }
+/* phones: no double-tap zoom, no pull-to-refresh or rubber-band scrolling */
+body.mobile { touch-action: manipulation; overscroll-behavior: none; }
 body.gl canvas#game { pointer-events: none; z-index: 1; }
 canvas#game3d { z-index: 0; }
 body:not(.gl) canvas#game3d { display: none; }
@@ -61,6 +63,7 @@ button, a.menu-item { font: inherit; color: inherit; }
 }
 .menu-item:hover, .menu-item.focus { border-color: var(--gold); background: linear-gradient(90deg, #ff4d1f, #ffb21f); color: #160800; transform: skewX(-8deg) scale(1.04); box-shadow: 0 0 22px rgba(255, 120, 20, 0.45); }
 .menu-item[disabled] { opacity: 0.35; pointer-events: none; }
+.menu-item[hidden] { display: none; }
 
 .card-panel { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px 22px 24px; width: min(440px, 100%); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
 .card-panel.wide { width: min(960px, 100%); }
@@ -184,6 +187,26 @@ body.touch #touch.show { display: block; }
   #touch .tb { font-size: 11px; }
   #touch .tb-p { top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: 38px; height: 38px; }
 }
+/* phones: a title screen that fits sideways (two-column menu, no desktop-only items) */
+body.mobile #download-link, body.mobile #title .press { display: none; }
+@media (max-height: 520px) {
+  body.mobile .title-wrap { padding: 8px 16px; }
+  body.mobile .logo-main { font-size: min(64px, 15vh); }
+  body.mobile .logo-top { font-size: min(22px, 5vh); }
+  body.mobile .logo-year { font-size: min(28px, 7vh); }
+  body.mobile .tagline { margin: 2px 0 8px; font-size: 11px; }
+  body.mobile #title .menu { display: grid; grid-template-columns: 1fr 1fr; width: min(560px, 92vw); gap: 7px; }
+  body.mobile #title .menu-item { padding: 8px 10px; font-size: 14px; }
+  body.mobile #ios-tip { margin-top: 8px; max-width: 560px; font-size: 13px; padding: 7px 30px 7px 12px; }
+}
+/* iPhone: how to get full screen (Safari has no fullscreen for pages) */
+#ios-tip { position: relative; margin: 14px auto 0; max-width: 360px; padding: 10px 34px 10px 14px; border: 1px solid rgba(255, 210, 58, 0.5); border-radius: 12px; background: rgba(10, 12, 32, 0.85); text-align: left; font-size: 14px; color: var(--text); line-height: 1.35; }
+#ios-tip[hidden] { display: none; }
+#ios-tip > b { display: block; font-family: var(--display); font-size: 12px; letter-spacing: 0.1em; color: var(--gold); margin-bottom: 3px; }
+#ios-tip button { position: absolute; top: 4px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; }
+.share-ico { display: inline-block; width: 12px; height: 14px; border: 2px solid currentColor; border-top: 0; border-radius: 0 0 2px 2px; position: relative; vertical-align: -2px; margin: 0 2px; }
+.share-ico::before { content: ""; position: absolute; left: 3px; top: -7px; width: 2px; height: 11px; background: currentColor; }
+.share-ico::after { content: ""; position: absolute; left: 0; top: -7px; width: 4px; height: 4px; border-left: 2px solid currentColor; border-top: 2px solid currentColor; transform: translateX(1px) rotate(45deg); }
 /* phones held upright: ask for landscape */
 #rotate { display: none; }
 @media (orientation: portrait) and (max-width: 900px) {
