@@ -116,7 +116,9 @@ button, a.menu-item { font: inherit; color: inherit; }
 #plays { align-items: flex-end; justify-content: center; padding: 10px; pointer-events: none; }
 .play-panels { display: flex; gap: 12px; width: min(1180px, 100%); pointer-events: auto; }
 /* one panel: keep three rows of 16:9 cards, the special row and the header inside the screen height */
-@media (min-height: 621px) { .play-panels:has(> .play-panel:only-child) { width: min(1180px, 100%, calc((100vh - 250px) * 1.7)); } }
+body:not(.touch) .play-panels:has(> .play-panel:only-child) { width: min(1180px, 100%, calc((100vh - 250px) * 1.7)); }
+/* phones use the compact layout below instead when the screen is short */
+@media (min-height: 621px) { body.touch .play-panels:has(> .play-panel:only-child) { width: min(1180px, 100%, calc((100vh - 250px) * 1.7)); } }
 .play-panel { flex: 1; min-width: 0; background: var(--panel); border: 2px solid var(--line); border-radius: 16px; padding: 10px; box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5); }
 .play-panel.p1 { border-color: rgba(46, 230, 255, 0.6); }
 .play-panel.p2 { border-color: rgba(255, 138, 31, 0.6); }

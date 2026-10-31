@@ -202,7 +202,9 @@
     // (this needs the tap that starts a game). iOS Safari ignores both; the
     // rotate screen covers that.
     goLandscape: function () {
-      if (!document.body.classList.contains('touch')) return;
+      // phones and small tablets only: a touchscreen laptop stays windowed
+      var phone = document.body.classList.contains('touch') && window.matchMedia && window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820;
+      if (!phone) return;
       var el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
       var lock = function () { try { var o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(function () {}); } catch (e) { /* unsupported */ } };
       try {
