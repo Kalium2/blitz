@@ -25,7 +25,7 @@
     fgmiss: ['No good!', 'Wide!', 'He missed it!'],
     onside: ['Onside kick!', 'They\'re going for it!'],
     audible: ['Audible!', 'Change at the line!'],
-    safety: ['Safety!', 'Two points!'],
+    safety: ['Safety!', 'Two points for the defense!'],
     stiff: ['Stiff arm!', 'Get off me!'],
     lateral: ['Lateral!', 'Pitch it back!'],
     kickoff: ['Here we go!', 'Let\'s play some football!', 'Kickoff!'],

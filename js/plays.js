@@ -49,6 +49,36 @@
       cont: { WR1: true, WR2: true, TE: true }, block: { RB: true } }
   ];
 
+  // Page two: classic concepts every playbook runs, drawn up for 7-on-7.
+  //   pa: play-action fake to the back first; boot: where the QB rolls out to
+  //   draw: the QB shows pass, then hands off late; keeper: the QB runs it
+  var OFFENSE2 = [
+    { id: 'verts', name: 'FOUR VERTS', type: 'pass', form: 'spread', primary: 'TE', drop: 6,
+      routes: { WR1: [[30, 2]], WR2: [[30, -2]], TE: [[30, 0]], RB: [[2, 4], [4, 6]] },
+      cont: { WR1: true, WR2: true, TE: true } },
+    { id: 'smash', name: 'SMASH', type: 'pass', form: 'gun', primary: 'TE',
+      routes: { WR1: [[6, 0], [5, 1]], WR2: [[6, 0], [5, -1]], TE: [[10, 0], [18, 9]], RB: [[1, -4], [3, -9]] },
+      cont: { TE: true } },
+    { id: 'flood', name: 'FLOOD', type: 'pass', form: 'gun', primary: 'TE',
+      routes: { WR2: [[30, 0]], TE: [[10, 0], [10, 9]], RB: [[1, 4], [3, 10]], WR1: [[12, 0], [12, 14]] },
+      cont: { WR2: true, TE: true, WR1: true } },
+    { id: 'stick', name: 'STICK', type: 'pass', form: 'gun', primary: 'TE',
+      routes: { TE: [[6, 0], [6, -1]], WR2: [[25, 0]], RB: [[1, 4], [3, 9]], WR1: [[3, 0], [9, 7]] },
+      cont: { WR2: true, WR1: true } },
+    { id: 'drive', name: 'DRIVE', type: 'pass', form: 'gun', primary: 'TE',
+      routes: { TE: [[2, 0], [3, -14]], WR1: [[12, 0], [12, 13]], WR2: [[28, 0]], RB: [[0, 4], [2, 9]] },
+      cont: { TE: true, WR1: true, WR2: true } },
+    { id: 'paboot', name: 'PA BOOT', type: 'pass', form: 'under', primary: 'TE', pa: true, boot: [-6, -8],
+      routes: { TE: [[3, 0], [5, -14]], WR1: [[16, 0], [14, -3]], WR2: [[12, 0], [24, -9]], RB: [[1.5, 1.2], [5, 7]] },
+      cont: { TE: true, WR2: true } },
+    { id: 'draw', name: 'HB DRAW', type: 'run', form: 'gun', draw: true,
+      run: [[-1, -2.2], [6, -2.4], [15, -2.4]], block: { WR1: true, WR2: true, TE: true } },
+    { id: 'counter', name: 'COUNTER', type: 'run', form: 'under',
+      run: [[0.5, 1.5], [1.5, -1], [4, -3.5], [15, -4.5]], block: { WR1: true, WR2: true, TE: true } },
+    { id: 'sneak', name: 'QB SNEAK', type: 'run', form: 'under', keeper: true,
+      run: [[2, 0.3], [6, 0.3]], block: { WR1: true, WR2: true, TE: true, RB: true } }
+  ];
+
   var SPECIAL = [
     { id: 'punt', name: 'PUNT', type: 'punt', special: true },
     { id: 'fg', name: 'FIELD GOAL', type: 'fg', special: true },
@@ -106,6 +136,6 @@
     { id: 'spy', name: 'QB SPY', a: { F1: 'rush', F2: 'rush', NT: 'rush', M: 'spy', B1: { man: 'WR1' }, DB: { man: 'WR2' }, B2: { zone: [20, 0] } } }
   ];
 
-  FB.Plays = { FORMATIONS: FORMATIONS, DEF_ALIGN: DEF_ALIGN, OFFENSE: OFFENSE, SPECIAL: SPECIAL, DEFENSE: DEFENSE,
+  FB.Plays = { FORMATIONS: FORMATIONS, DEF_ALIGN: DEF_ALIGN, OFFENSE: OFFENSE, OFFENSE2: OFFENSE2, SPECIAL: SPECIAL, DEFENSE: DEFENSE,
     ROUTES: ROUTES, ROUTE_NAMES: ROUTE_NAMES, DEFAULT_CUSTOM: DEFAULT_CUSTOM, customPlay: customPlay };
 })();
