@@ -6,6 +6,12 @@
   <title>Football Blitz '26</title>
   <meta name="description" content="Football Blitz '26: an arcade 7-on-7 football game in the spirit of NFL Blitz, with 2026 NFL rosters rated from fantasy stats.">
   <meta name="theme-color" content="#07081a">
+  <!-- iPhone/iPad: run full screen when added to the home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Blitz '26">
+  <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="assets/icon-192.png">
@@ -34,9 +40,15 @@
         <button class="menu-item" data-action="create">CREATE A PLAY</button>
         <button class="menu-item" data-action="extras">EXTRAS</button>
         <button class="menu-item" data-action="options">OPTIONS</button>
+        <button class="menu-item" data-action="install" id="install-item" hidden>INSTALL APP</button>
         <a class="menu-item" id="download-link" href="football-blitz.zip" download>DOWNLOAD GAME</a>
       </nav>
       <p class="press">USE ARROWS / WASD + SPACE &mdash; OR A GAMEPAD &mdash; OR TAP</p>
+      <div id="ios-tip" hidden>
+        <b>PLAY FULL SCREEN ON iPHONE</b>
+        <span>Tap <i class="share-ico" aria-label="Share"></i> Share, then <b>Add to Home Screen</b>, and open Blitz '26 from your home screen.</span>
+        <button id="ios-tip-close" aria-label="Dismiss">&times;</button>
+      </div>
     </div>
     <div class="demo-tag">CPU DEMO</div>
   </section>
@@ -109,6 +121,7 @@
             <li>The dotted arc turns red where a defender can get a hand on the ball; the tag tells you if the landing spot is OPEN, TIGHT or COVERED.</li>
             <li><b>Receiver icons:</b> before the snap press <kbd>1</kbd>-<kbd>4</kbd> (or click an icon) to change that receiver's hot route; after the snap the same key throws to him.</li>
             <li><b>Timeout:</b> <kbd>T</kbd> (or <b>CALL TIMEOUT</b> in the pause menu). The clock keeps running after in-bounds plays, so timeouts save time late in a half.</li>
+            <li><b>On a phone:</b> hold <b>PASS</b> to charge the throw and release it; it goes to the most open receiver (or the one the stick points at). Tap a receiver's icon to pick him.</li>
             <li>No mouse? Point the stick at a receiver and press <kbd>ACTION</kbd>. Stick neutral throws to the most open man (the pulsing ring).</li>
             <li>Hold <kbd>TURBO</kbd> while passing for a <b>bullet pass</b>: faster and flatter, a bit less accurate.</li>
             <li>Ball carrier: <kbd>ACTION</kbd> = <b>spin</b>, <kbd>TURBO</kbd>+<kbd>ACTION</kbd> = <b>stiff-arm</b>, <kbd>SPECIAL</kbd> = <b>hurdle</b>, <kbd>TURBO</kbd>+<kbd>SPECIAL</kbd> = <b>lateral</b> to a trailing teammate.</li>
@@ -198,10 +211,13 @@
         <button class="menu-item" data-action="back">BACK</button>
       </nav>
       <p class="note" id="roster-note"></p>
+      <p class="note" id="device-note"></p>
     </div>
   </section>
 
   <!-- TOUCH CONTROLS -->
+  <div id="rotate" aria-live="polite"><div class="rot-phone"></div><p>ROTATE YOUR PHONE</p><span>Football Blitz plays sideways.</span></div>
+
   <div id="touch" aria-hidden="true">
     <div class="stick"><div class="knob"></div></div>
     <div class="tbtns">
@@ -214,6 +230,7 @@
 
   <noscript><p class="noscript">Football Blitz needs JavaScript enabled.</p></noscript>
 
+  <script src="js/device.js"></script>
   <script src="js/vendor/three.bundle.js"></script>
   <script src="js/data/template.js"></script>
   <script src="js/data/teams.js"></script>

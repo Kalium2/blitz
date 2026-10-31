@@ -704,7 +704,8 @@
     // turbo meters
     (g.ctl || []).forEach(function (c, i) {
       var mw = Math.min(180, W * 0.24), mh = 8;
-      var mx = i === 0 ? 18 : W - mw - 18, my = opts.top ? H - 26 : by - 26;
+      var sa = FB.safeArea || { l: 0, r: 0, b: 0 };
+      var mx = i === 0 ? 18 + sa.l : W - mw - 18 - sa.r, my = opts.top ? H - 26 - sa.b : by - 26;
       if (!opts.top && W < 900) my = by - 50 - i * 0;
       var ccol = c.slot === 0 ? '#2ee6ff' : '#ff8a1f';
       ctx.fillStyle = ccol; ctx.textAlign = i === 0 ? 'left' : 'right';
