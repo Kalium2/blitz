@@ -223,7 +223,9 @@
       var r = 11, x = s.x, y = s.y - 14, M = 26, edge = 0;
       // a receiver out of the camera's view gets his icon pinned to the screen edge, pointing at him
       if (x < M) { x = M; edge = -1; } else if (x > R.W - M) { x = R.W - M; edge = 1; }
-      y = Math.max(M, Math.min(R.H - M, y));
+      // on touch screens the scoreboard and hint sit at the top: keep icons below them
+      var top = document.body.classList.contains('touch') ? Math.min(R.H * 0.32, 120) : M;
+      y = Math.max(top, Math.min(R.H - M, y));
       if (edge) {
         ctx.beginPath(); ctx.moveTo(x + edge * (r + 11), y); ctx.lineTo(x + edge * (r + 3), y - 7); ctx.lineTo(x + edge * (r + 3), y + 7); ctx.closePath();
         ctx.lineWidth = 3; ctx.strokeStyle = '#0a0a18'; ctx.stroke(); ctx.fillStyle = ring; ctx.fill();

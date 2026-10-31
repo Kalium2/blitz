@@ -128,6 +128,7 @@
       var o = this.opts;
       if (screen === 'title') {
         if (action === '1p' || action === '2p') {
+          this.goLandscape();
           this.twoPlayer = action === '2p';
           Input.setMode(this.twoPlayer);
           UI.hide('title');
@@ -195,6 +196,21 @@
         else if (action === 'teams') { this.endGame(); this.mode = 'teams'; UI.openTeams(this.twoPlayer, this.lastTeams); }
         else { this.endGame(); this.toTitle(); }
       }
+    },
+
+    // Phones: go fullscreen and lock to landscape where the browser allows it
+    // (this needs the tap that starts a game). iOS Safari ignores both; the
+    // rotate screen covers that.
+    goLandscape: function () {
+      if (!document.body.classList.contains('touch')) return;
+      var el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
+      var lock = function () { try { var o = screen.orientation; if (o && o.lock) o.lock('landscape').catch(function () {}); } catch (e) { /* unsupported */ } };
+      try {
+        if (req && !document.fullscreenElement && !document.webkitFullscreenElement) {
+          var r = req.call(el, { navigationUI: 'hide' });
+          if (r && r.then) r.then(lock).catch(function () {}); else lock();
+        } else lock();
+      } catch (e) { /* fullscreen is optional */ }
     },
 
     toTitle: function () {
@@ -378,10 +394,29 @@
       var pl = c && c.pl, b = g.ball;
       var menu = this.paused || !!UI.ps || UI.isOpen('pat') || !!UI.top();
       var spot = m.on ? this.renderer.groundAt(m.sx, m.sy) : null;
-      var canAim = !menu && !!spot && g.phase === 'live' && !!pl && b.state === 'held' && b.holder === pl && g.canPass(pl);
+      var canPassNow = !menu && g.phase === 'live' && !!pl && b.state === 'held' && b.holder === pl && g.canPass(pl);
+      var canAim = canPassNow && !!spot;
+      // Touch: the PASS button works like holding the mouse. The throw is
+      // auto-targeted (the stick's direction, or the most open receiver), and
+      // holding fills the same power ring. A finger on the field still aims by hand.
+      var tb = Input.touch, tDown = !!(tb.active && tb.action);
+      var tPress = tDown && !A.tPrev, tRel = !tDown && !!A.tPrev;
+      A.tPrev = tDown;
+      this.setPassButton(canPassNow && tb.active);
+      if (canPassNow && tb.active && !(m.on && m.down)) {
+        if (!A.charging || !A.btnRec || A.btnRec.state === 'down') A.btnRec = g.pickTarget(pl, inputs[0]);
+        var rec = A.btnRec;
+        var sc = rec && this.renderer.project(rec.x, rec.y, 0);
+        if (rec && sc) {
+          spot = { x: rec.x, y: rec.y };
+          m = { on: true, sx: sc.x, sy: sc.y, down: tDown, pressed: tPress, released: tRel, right: false };
+          canAim = true;
+          inputs[0].action = false;            // the press charges a throw instead of throwing at once
+        }
+      } else if (!canPassNow) A.btnRec = null;
       var ui = { active: false, flash: A.flash, fx: A.fx, fy: A.fy };
       this.aimUI = ui;
-      this.setAimCursor(canAim);
+      this.setAimCursor(canAim && !tb.active);
       // clicking a receiver icon = pressing his number (hot route before the snap, pass after it)
       var badge = null;
       if (!menu && m.pressed) (FB.recBadges || []).forEach(function (bd) { if (Math.hypot(m.sx - bd.x, m.sy - bd.y) <= bd.r) badge = bd; });
@@ -417,6 +452,14 @@
       ui.plan = g.planPass(pl, spot, inputs[0].aim.power, null, true);
       ui.active = true; ui.sx = m.sx; ui.sy = m.sy; ui.charging = A.charging; ui.tap = tap; ui.fill = fill; ui.over = over; ui.zone = ZONE;
       ui.flash = A.flash; ui.fx = A.fx; ui.fy = A.fy;
+    },
+
+    // the touch GO button reads PASS while the QB can throw
+    setPassButton: function (on) {
+      if (this.passBtn === on) return;
+      this.passBtn = on;
+      var bt = document.querySelector('#touch .tb-a');
+      if (bt) { bt.textContent = on ? 'PASS' : 'GO'; bt.classList.toggle('pass', on); }
     },
 
     setAimCursor: function (on) {
@@ -496,6 +539,7 @@
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
+          if (this.aimUI && this.aimUI.active && touch) return 'HOLD PASS: POWER  \u2022  RELEASE ON GOLD: PERFECT  \u2022  STICK OR TAP AN ICON: CHOOSE RECEIVER';
           if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  1-4: THROW TO ICON  \u2022  HOLD + RELEASE ON GOLD: PERFECT  \u2022  RIGHT-CLICK: CANCEL';
           if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
