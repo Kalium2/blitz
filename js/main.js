@@ -675,7 +675,7 @@
             break;
           case 'fumble': R.banner('FUMBLE!', { dur: 1.6, color: '#ff4d1f' }); if (sfx) { Audio.roar(0.7, 2); Audio.call('fumble', true); } break;
           case 'recovered': R.banner('TURNOVER!', { big: false, dur: 1.4 }); break;
-          case 'sack': R.banner('SACK!', { dur: 1.5, color: '#ff4d1f' }); if (R.cheer) R.cheer(0.6); if (sfx) { Audio.roar(0.6, 2); Audio.call('sack', true); } break;
+          case 'sack': R.banner('SACK!', { sub: d.loss ? 'LOSS OF ' + d.loss : '', dur: 1.5, color: '#ff4d1f' }); if (R.cheer) R.cheer(0.6); if (sfx) { Audio.roar(0.6, 2); Audio.call('sack', true); } break;
           case 'onfire':
             R.banner(team.abbr + ' ON FIRE!', { dur: 2.4, color: '#ff6a00', band: 'rgba(120,30,0,0.75)' });
             if (R.cheer) R.cheer(0.7);

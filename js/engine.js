@@ -1697,7 +1697,7 @@
       this.stats.team[d.team].sacks++;
       this.pstat(d).sacks++;
       this.defStop(d.team);
-      this.emit('sack', { p: d });
+      this.emit('sack', { p: d, loss: Math.max(0, Math.round(-this.relX(c.x))) });
     } else if (behind) {
       this.defStop(d.team);
     }
