@@ -1693,9 +1693,9 @@
 
   G.tackle = function (c, d) {
     var big = d.state === 'dive' || d.wantTurbo || d.humanTurbo || this.powerOf(d) === 'tank';
-    var fumbleP = 0.012 + (big ? 0.02 : 0) - (c.r.str - 70) / 3000;
-    if (c.windT > 0) { fumbleP += 0.2; c.windT = 0; c.pendingThrow = null; }   // strip sack mid-throw
-    if (this.fire[d.team]) fumbleP += 0.015;
+    var fumbleP = 0.007 + (big ? 0.012 : 0) - (c.r.str - 70) / 3000;
+    if (c.windT > 0) { fumbleP += 0.12; c.windT = 0; c.pendingThrow = null; }   // strip sack mid-throw
+    if (this.fire[d.team]) fumbleP += 0.01;
     if (this.fire[c.team]) fumbleP *= 0.3;
     this.log.tackler = d;
     this.pstat(d).tak++;
