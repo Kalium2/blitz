@@ -5,7 +5,7 @@
  * lines, end zones run to -10 and 110. y runs across the field from 0 to
  * 53.33. Team 0 always attacks x = 100, team 1 always attacks x = 0.
  *
- * Arcade rules (NFL Blitz style): 7 on 7, 10 yards for a first down, no
+ * Arcade rules (NFL Blitz style): 11 on 11, 10 yards for a first down, no
  * penalties, late hits allowed, 3 straight completions or defensive stops
  * put a team ON FIRE.
  */
@@ -22,6 +22,7 @@
   function len(x, y) { return Math.sqrt(x * x + y * y); }
   function dist(a, b) { return len(a.x - b.x, a.y - b.y); }
   function dirOf(t) { return t === 0 ? 1 : -1; }
+  function isOL(p) { return !!p && /^OL/.test(p.role); }
   // inside the sidelines and end lines (the end zones run to -10 and 110)
   function inBounds(p) { return p.y >= 0 && p.y <= FW && p.x >= -10 && p.x <= 110; }
   function goalOf(t) { return t === 0 ? 100 : 0; }   // goal line team t attacks
@@ -201,25 +202,25 @@
     var kd = dirOf(kickTeam), rd = dirOf(recv);
     var self = this;
 
-    // Kicking team: 5 named defenders + 2 depth players spread across the field.
+    // Kicking team: all 11 defenders spread across the field, the kicker in the middle.
     var kInfos = kt.defense.concat(kt.depth);
-    var lanes = [7, 14, 21, 26.6, 32, 39, 46];
+    var lanes = [4, 9, 14, 19, 23, 26.6, 30.5, 35, 40, 45, 49.5];
     kInfos.forEach(function (info, i) {
       var p = self.mk(kickTeam, info, 'cover', 'K' + i);
       p.x = self.losX - kd * 1.2; p.y = lanes[i];
     });
-    this.kicker = this.players[3];
+    this.kicker = this.players[5];
     this.kicker.x = this.losX - kd * 5;
 
     // Receiving team: RB returns, everyone else blocks.
-    var rInfos = [rt.offense[1], rt.offense[2], rt.offense[3], rt.offense[4], rt.ol[0], rt.ol[1], rt.offense[0]];
-    var spots = [[5, MID], [40, 12], [40, 41], [34, 22], [34, 31], [27, 18], [27, 35]];
+    var rInfos = [rt.offense[1], rt.offense[2], rt.offense[3], rt.offense[4], rt.ol[0], rt.ol[1], rt.offense[0], rt.ol[2], rt.ol[3], rt.ol[4], rt.wr3];
+    var spots = [[5, MID], [40, 12], [40, 41], [34, 22], [34, 31], [27, 18], [27, 35], [40, 26.6], [34, 8], [34, 45], [14, MID + 4]];
     rInfos.forEach(function (info, i) {
       var p = self.mk(recv, info, i === 0 ? 'KR' : 'block', 'R' + i);
       p.x = ownGoal(recv) + rd * spots[i][0]; p.y = spots[i][1];
       p.blocker = i !== 0;
     });
-    this.returner = this.players[7];
+    this.returner = this.players[kInfos.length];
     this.agePowers();
 
     this.land = { x: ownGoal(recv) + rd * rnd(-1, 7), y: MID + rnd(-9, 9) };
@@ -254,15 +255,19 @@
     this.clearPlay();
     var ot = this.teams[o], dt = this.teams[d];
     var F = Plays.FORMATIONS[this.offPlay.form];
-    var infos = { QB: ot.offense[0], RB: ot.offense[1], WR1: ot.offense[2], WR2: ot.offense[3], TE: ot.offense[4], OL0: ot.ol[0], OL1: ot.ol[1] };
+    var infos = { QB: ot.offense[0], RB: ot.offense[1], WR1: ot.offense[2], WR2: ot.offense[3], TE: ot.offense[4], WR3: ot.wr3,
+      OL0: ot.ol[0], OL1: ot.ol[1], OL2: ot.ol[2], OL3: ot.ol[3], OL4: ot.ol[4] };
     var play = this.offPlay;
     this.off = {};
-    ['QB', 'RB', 'WR1', 'WR2', 'TE', 'OL0', 'OL1'].forEach(function (role) {
+    ['QB', 'RB', 'WR1', 'WR2', 'TE', 'WR3', 'OL0', 'OL1', 'OL2', 'OL3', 'OL4'].forEach(function (role) {
       var p = self.mk(o, infos[role], role, role);
       var w = self.Wf(F[role][0], F[role][1]);
       p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? 0 : Math.PI;
       self.off[role] = p;
-      p.blocker = role === 'OL0' || role === 'OL1' || !!(play.block && play.block[role]);
+      p.blocker = /^OL/.test(role) || !!(play.block && play.block[role]);
+      // pass set: the tackles kick back and out to meet the edge rushers
+      var tackle = role === 'OL3' || role === 'OL4';
+      p.home = self.W(tackle ? -2.4 : -1.5, (F[role][1] + (tackle ? Math.sign(F[role][1]) * 1.2 : 0)) * self.flip);
       if (play.routes && play.routes[role] && !(play.block && play.block[role])) {
         p.route = play.routes[role].map(function (pt) { return self.Wf(F[role][0] + pt[0], F[role][1] + pt[1]); });
         p.cont = !!(play.cont && play.cont[role]);
@@ -271,6 +276,12 @@
         p.route = play.routes[role].slice(0, 1).map(function (pt) { return self.Wf(F[role][0] + pt[0], F[role][1] + pt[1]); });
       }
     });
+    // the slot receiver runs a stick route on any pass play that doesn't give him one
+    var w3 = this.off.WR3;
+    if (play.type !== 'run' && !w3.route && !w3.blocker) {
+      var inward = F.WR3[1] < 0 ? 1 : -1;
+      w3.route = [[6, 0], [6, inward]].map(function (pt) { return self.Wf(F.WR3[0] + pt[0], F.WR3[1] + pt[1]); });
+    }
     var qb = this.off.QB;
     if (play.type === 'run') {
       // the designed runner follows the run path (the QB himself on a keeper)
@@ -278,14 +289,15 @@
       runner.route = play.run.map(function (pt) { return self.Wf(rf[0] + pt[0], rf[1] + pt[1]); });
     }
     this.qbDrop = play.boot ? this.Wf(play.boot[0], play.boot[1])
-      : play.draw ? this.W(F.QB[0] - 1.5, 0)
+      : play.draw ? this.W(F.QB[0] - 0.8, 0)
       : play.form === 'under' ? this.W(-5.5, 0) : this.W(F.QB[0] - (play.drop ? play.drop - 5 : 1.5), 0);
 
     // defense
-    var dInfos = { F1: dt.defense[0], F2: dt.defense[1], M: dt.defense[2], B1: dt.defense[3], B2: dt.defense[4], NT: dt.depth[0], DB: dt.depth[1] };
+    var dInfos = { F1: dt.defense[0], F2: dt.defense[1], M: dt.defense[2], B1: dt.defense[3], B2: dt.defense[4],
+      NT: dt.depth[0], DB: dt.depth[1], T2: dt.depth[2], W: dt.depth[3], SL: dt.depth[4], FS: dt.depth[5] };
     this.def = {};
     var A = Plays.DEF_ALIGN;
-    ['F1', 'F2', 'NT', 'M', 'B1', 'DB', 'B2'].forEach(function (key) {
+    Plays.DEF_KEYS.forEach(function (key) {
       var p = self.mk(d, dInfos[key], 'D', key);
       var spot = A[key].slice();
       var asg = self.defPlay.a[key];
@@ -293,6 +305,7 @@
       if (asg && asg.man === 'WR1') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR1[1] * self.flip];
       if (asg && asg.man === 'WR2') spot = [self.defPlay.id === 'man' ? 2 : 6, F.WR2[1] * self.flip];
       if (asg && asg.man === 'TE') spot = [4.5, F.TE[1] * self.flip];
+      if (asg && asg.man === 'WR3') spot = [5, F.WR3[1] * self.flip];
       var w = self.W(spot[0], spot[1]);
       p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? Math.PI : 0;
       p.assign = asg;
@@ -320,18 +333,21 @@
     this.dir = dirOf(o);
     this.clearPlay();
     var ot = this.teams[o], dt = this.teams[1 - o];
-    var oInfos = ot.offense.concat(ot.ol), dInfos = dt.defense.concat(dt.depth);
+    // 11 a side: [QB, RB, WR1, WR2, TE, center, guards, tackles, WR3] and the full defense
+    var oInfos = ot.offense.concat([ot.ol[2]], ot.ol.slice(0, 2), ot.ol.slice(3), [ot.wr3]), dInfos = dt.defense.concat(dt.depth);
     var punt = kind === 'punt';
-    var oSpots = punt ? [[-12, 0], [-2, 3], [-1, -6], [-1, 6], [-1, 3.2], [-0.6, -1.6], [-0.6, 0]]
-                      : [[-7, 0], [-9.6, -1.6], [-1, -4.6], [-1, 4.6], [-1, 3.2], [-0.6, -1.6], [-0.6, 0]];
-    var dSpots = punt ? [[1, -3], [1, 3], [1, 0], [6, -8], [6, 8], [35, -6], [38, 4]] : [[1, -3], [1, 3], [1, 0], [1, -6], [1, 6], [5, -9], [5, 9]];
+    var line = [[-0.6, 0], [-0.6, -1.6], [-0.6, 1.6], [-0.6, -3.2], [-0.6, 3.2]];
+    var oSpots = (punt ? [[-12, 0], [-3, 1.5], [-0.8, -22], [-0.8, 22], [-1, 4.8]] : [[-7, 0], [-9.6, -1.6], [-1, -6.4], [-1, 6.4], [-1, 4.8]])
+      .concat(line, [[-1, -4.8]]);
+    var dSpots = punt ? [[1, -3], [1, 3], [1, 0], [6, -8], [6, 8], [35, -6], [38, 4], [1, -5.5], [1, 5.5], [8, -14], [8, 14]]
+                      : [[1, -3], [1, 3], [1, 0], [1, -6], [1, 6], [5, -9], [5, 9], [1, -1.5], [1, 1.5], [5, 0], [8, 0]];
     oInfos.forEach(function (info, i) {
       var p = self.mk(o, info, 'K', 'K' + i); var w = self.W(oSpots[i][0], oSpots[i][1]); p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? 0 : Math.PI;
     });
     dInfos.forEach(function (info, i) {
       var p = self.mk(1 - o, info, 'K', 'D' + i); var w = self.W(dSpots[i][0], dSpots[i][1]); p.x = w.x; p.y = w.y; p.face = self.dir > 0 ? Math.PI : 0;
     });
-    var holder = this.players[0], center = this.players[6];
+    var holder = this.players[0], center = this.players[5];
     var kicker = punt ? holder : this.players[1];
     var a = { kind: kind, stage: 'set', t: 0, holder: holder, kicker: kicker, center: center, human: this.isHuman(o),
       spot: { x: holder.x, y: holder.y }, power: null, acc: null, meterT: 0, crossed: false, done: false };
@@ -572,7 +588,7 @@
       var pick = null;
       if (self.playType === 'kickoff') {
         if (c.team === self.poss) pick = self.returner;
-        else if (reset || !c.pl || c.pl.team !== c.team) pick = self.players[3];
+        else if (reset || !c.pl || c.pl.team !== c.team) pick = self.kicker || self.players[5];
         else pick = c.pl;
       } else if (self.phase === 'presnap' || reset) {
         if (c.team === self.poss) pick = self.off.QB;
@@ -698,7 +714,7 @@
         if (inp.action) self.snapTimer = Math.min(self.snapTimer, 0);
       } else if (c.pl) {
         if (inp.action) {
-          var keys = ['M', 'B2', 'B1', 'DB', 'F1', 'F2', 'NT'];
+          var keys = ['M', 'W', 'SL', 'B2', 'FS', 'B1', 'DB', 'F1', 'T2', 'NT', 'F2'];
           var k = keys[(keys.indexOf(c.pl.key) + 1) % keys.length];
           c.defKey = k;
           self.setControl(c, self.def[k]);
@@ -779,7 +795,7 @@
       if (!d || c.team === self.poss || d.state !== 'ok') return;
       var wl = len(d.want.x, d.want.y);
       if (wl < 0.3 || (d.want.x / wl) * -self.dir < 0.2) return;   // must be heading into the backfield
-      d.immune = 0.55; d.immuneTo = null;
+      d.immune = 0.25; d.immuneTo = null;
       var sp = self.maxSpeed(d) * 0.7;
       d.vx = d.want.x / wl * sp; d.vy = d.want.y / wl * sp;
       self.emit('getoff', { p: d });
@@ -842,7 +858,7 @@
       var rb = this.off.RB, qb = this.off.QB;
       if (this.offPlay.pitch) {
         if (this.playT >= this.pitchAt) this.pitchTo(qb, rb);
-      } else if (this.offPlay.draw ? this.playT > 0.45 : (dist(qb, rb) < 1.3 || this.playT > 0.75)) {
+      } else if (this.offPlay.draw ? this.playT > 0.38 : (dist(qb, rb) < 1.3 || this.playT > 0.75)) {
         this.giveBall(rb, qb.x < 0);
         this.handedOff = true;
         this.log.rusher = rb;
@@ -1003,7 +1019,7 @@
   G.eligible = function (team) {
     var self = this;
     return this.players.filter(function (p) {
-      return p.team === team && (p.role === 'WR1' || p.role === 'WR2' || p.role === 'TE' || p.role === 'RB') && p.state !== 'down';
+      return p.team === team && (p.role === 'WR1' || p.role === 'WR2' || p.role === 'WR3' || p.role === 'TE' || p.role === 'RB') && p.state !== 'down';
     });
   };
 
@@ -1200,7 +1216,9 @@
         if (d.immune > 0 && (d.immuneTo === bl || d.ctl >= 0)) continue;
         // the defender you control can't be picked up once he's at the ball carrier
         if (d.ctl >= 0 && carrier && dist(d, carrier) < 2.4) continue;
-        if (dist(bl, d) < 1.05) { self.engage(bl, d); break; }
+        // linemen mirror rushers in pass protection, so they get hands on from a little farther away
+        var reach = isOL(bl) && self.playType !== 'run' && (d.assign === 'rush' || d.assign === 'runfit') ? 1.35 : 1.05;
+        if (dist(bl, d) < reach) { self.engage(bl, d); break; }
       }
     });
   };
@@ -1209,7 +1227,7 @@
     var b = this.ball;
     if (this.playType === 'kickoff') return p.blocker && (b.state !== 'air' || this.playT > 1.2);
     if (p.role === 'QB') return false;
-    if (p.role === 'OL0' || p.role === 'OL1') return true;
+    if (isOL(p)) return true;
     if (b.state === 'air' && b.target === p) return false;
     var runActive = b.state === 'held' && b.holder && b.holder.team === p.team && b.holder !== p && !(b.holder === this.off.QB && !this.handedOff && this.relX(b.holder.x) < 0);
     if (runActive) return true;
@@ -1217,13 +1235,13 @@
   };
 
   G.engage = function (bl, d) {
-    var ol = bl.role === 'OL0' || bl.role === 'OL1';
-    var base = ol ? 1.55 : (this.playType === 'kickoff' ? 0.35 : 0.55);
+    var ol = isOL(bl);
+    var base = ol ? 2.0 : (this.playType === 'kickoff' ? 0.35 : 0.55);
     var t = base + (bl.r.str - (d.r.prs * 0.55 + d.r.str * 0.45)) / 22 + rnd(-0.45, 0.75);
     if (this.fire[d.team]) t *= 0.6;
     if (this.fire[bl.team]) t *= 1.25;
-    if (d.ctl >= 0) t *= 0.25; // the player you control fights off blocks quickly
-    bl.eng = d; d.eng = bl; bl.engT = clamp(t, d.ctl >= 0 ? 0.15 : ol ? 0.35 : 0.2, ol ? 3.2 : 1.4); bl.blocking = true;
+    if (d.ctl >= 0) t *= 0.5; // the player you control fights off blocks faster than the CPU's
+    bl.eng = d; d.eng = bl; bl.engT = clamp(t, d.ctl >= 0 ? 0.3 : ol ? 0.35 : 0.2, ol ? 3.2 : 1.4); bl.blocking = true;
     // occasional pancake
     if (bl.r.str - d.r.str > 4 && Math.random() < 0.07) {
       d.state = 'down'; d.st = 0.9;
@@ -1534,7 +1552,7 @@
       if (p.state === 'dive') return;
       var d = dist(p, L);
       if (p.team === o) {
-        if (p.role === 'OL0' || p.role === 'OL1') return;
+        if (isOL(p)) return;
         if (d < dO) { dO = d; bestO = p; }
       } else if (d < dD) { dD = d; bestD = p; }
     });
@@ -1777,7 +1795,7 @@
     var rb = this.off.RB;
     if (this.offPlay.pitch) { p.want.x = -this.dir * 0.2; p.want.y = 0; return; }
     // draw: drop back like a pass, then give it to the back
-    if (this.offPlay.draw && this.playT < 0.45) { this.goTo(p, this.qbDrop.x, this.qbDrop.y, false, 0.8); return; }
+    if (this.offPlay.draw && this.playT < 0.38) { this.goTo(p, this.qbDrop.x, this.qbDrop.y, false, 0.8); return; }
     this.goTo(p, rb.x, rb.y, false);
   };
 
@@ -1805,12 +1823,27 @@
     if (this.hotRecv && this.openness(this.hotRecv) > 2.5) tMin = 0.6;
     if (this.offPlay.id === 'hail') tMin = 2.4;
     if (this.offPlay.pa) tMin += 0.3;
+    // a free rusher bearing down (unblocked, closing inside 4.5 yards) means
+    // the ball has to come out now: hot read, quick throw
+    // How soon he spots it depends on the CPU skill setting, varying a little each snap.
+    if (this.qbReadPlay !== this.stats.team[this.poss].plays) {
+      this.qbReadPlay = this.stats.team[this.poss].plays;
+      this.qbRead = [2.8, 3.4, 3.7][this.isHuman(1 - p.team) ? this.diff : 1] + rnd(-0.4, 0.4);
+    }
+    var free = false, readD = this.qbRead;
+    this.players.forEach(function (d) {
+      if (d.team === p.team || d.state !== 'ok' || d.eng) return;
+      var dd = dist(d, p);
+      if (dd < readD && ((p.x - d.x) * d.vx + (p.y - d.y) * d.vy) / (dd || 1) > 3) free = true;
+    });
+    if (this.hotRecv && t > 0.3 && free) { best = this.hotRecv; bestOpen = this.openness(best); }
     var throwIt = false;
     if (best) {
       if (t > tMin && bestOpen > 3.2) throwIt = true;
       else if (t > 2.4 && bestOpen > 1.9) throwIt = true;
       else if (t > 3.4) throwIt = true;
       else if (pressure < 2.0 && t > 0.6 && bestOpen > 1.4) throwIt = true;
+      else if (free && t > 0.3 && bestOpen > 1.2) throwIt = true;
     }
     if (throwIt && bestOpen < 1.6 && t > 3.4) { this.throwAway(p); return; }
     if (throwIt) { this.throwTo(p, best, bestOpen < 2.6 && dist(p, best) < 16 && Math.random() < 0.6); return; }
@@ -1872,7 +1905,7 @@
     var carrier = b.state === 'held' ? b.holder : null;
     if (b.state === 'air' && b.kind === 'pass') {
       if (b.target === p) { this.goTo(p, b.tx, b.ty, true, 0.6); return; }
-      if (p.role === 'OL0' || p.role === 'OL1') { this.thinkProtect(p); return; }
+      if (isOL(p)) { this.thinkProtect(p); return; }
       this.runRoute(p);
       return;
     }
@@ -1881,8 +1914,8 @@
     }
     var inPocket = carrier && carrier.role === 'QB' && !this.handedOff && !this.passThrown && this.relX(carrier.x) <= 0.5;
     if (inPocket && this.playType !== 'run') {
-      if (p.role === 'OL0' || p.role === 'OL1' || (p.blocker && !p.route)) { this.thinkProtect(p); return; }
-      if (this.playType === 'screen' && (p.role === 'OL0' || p.role === 'OL1')) { this.thinkProtect(p); return; }
+      if (isOL(p) || (p.blocker && !p.route)) { this.thinkProtect(p); return; }
+      if (this.playType === 'screen' && (isOL(p))) { this.thinkProtect(p); return; }
       if (p.blocker && p.route && p.ri >= p.route.length) { this.thinkProtect(p); return; }
       this.runRoute(p);
       return;
@@ -1893,11 +1926,11 @@
       if (pt) this.goTo(p, pt.x, pt.y, false);
       return;
     }
-    if (this.playType === 'run' && (p.role === 'OL0' || p.role === 'OL1')) { this.thinkBlock(p, this.off.RB); return; }
+    if (this.playType === 'run' && (isOL(p))) { this.thinkBlock(p, this.off.RB); return; }
   };
 
-  // Receivers by icon number: 1 WR1, 2 WR2, 3 TE, 4 RB.
-  var RECEIVERS = ['WR1', 'WR2', 'TE', 'RB'];
+  // Receivers by icon number: 1 WR1, 2 WR2, 3 TE, 4 RB, 5 WR3 (the slot).
+  var RECEIVERS = ['WR1', 'WR2', 'TE', 'RB', 'WR3'];
   G.RECEIVERS = RECEIVERS;
 
   // Hot routes at the line. Each press on a receiver's number moves him to
@@ -1938,7 +1971,7 @@
     this.hotChecked = true;
     var self = this, rushers = 0, blockers = 0;
     this.players.forEach(function (p) {
-      if (p.team === self.poss) { if (p.blocker || p.role === 'OL0' || p.role === 'OL1') blockers++; }
+      if (p.team === self.poss) { if (p.blocker || isOL(p)) blockers++; }
       else if (p.assign === 'rush' || p.assign === 'runfit') rushers++;
     });
     if (rushers <= blockers) return;
@@ -2006,13 +2039,18 @@
     var qb = this.ball.holder || this.off.QB, self = this;
     if (p.eng) { p.want.x = 0; p.want.y = 0; return; }
     var best = null, bd = 99;
-    var mate = p.role === 'OL0' ? this.off.OL1 : p.role === 'OL1' ? this.off.OL0 : null;
+    // five linemen: don't double a rusher another blocker already has
+    var taken = [];
+    this.players.forEach(function (q) { if (q !== p && q.team === p.team && q.protTarget) taken.push(q.protTarget); });
     this.players.forEach(function (d) {
       if (d.team === p.team || d.state !== 'ok') return;
       if (d.eng && d.eng !== p) return;
       if (self.relX(d.x) > 9) return;
       var rushing = d.assign === 'rush' || d.assign === 'runfit' || dist(d, qb) < 4.5;
-      var dd = dist(d, p) + dist(d, qb) * 0.5 + (rushing ? 0 : 6) + (mate && mate.protTarget === d ? 5 : 0);
+      // gap protection: a lineman takes the rusher nearest his own lane, so the
+      // tackles pick up the ends instead of everyone collapsing on the middle
+      var lane = p.home ? Math.abs(((d.y - p.home.y) * self.dir)) : 0;
+      var dd = (isOL(p) ? lane * 1.2 + dist(d, p) * 0.35 : dist(d, p) + dist(d, qb) * 0.5) + (rushing ? 0 : 6) + (taken.indexOf(d) >= 0 ? 5 : 0);
       if (dd < bd) { bd = dd; best = d; }
     });
     p.protTarget = best;
@@ -2020,7 +2058,7 @@
       var tx = best.x + (qb.x - best.x) * 0.25, ty = best.y + (qb.y - best.y) * 0.25;
       this.goTo(p, tx, ty, false);
     } else {
-      var hold = this.W(-1.5, p.role === 'OL0' ? -1.5 : 1.5);
+      var hold = p.home || this.W(-1.5, 0);
       this.goTo(p, hold.x, hold.y, false, 1);
     }
   };
@@ -2030,7 +2068,7 @@
     var best = null, bd = 99, self = this;
     var claimed = [];
     this.players.forEach(function (q) { if (q !== p && q.team === p.team && q.blockTarget) claimed.push(q.blockTarget); });
-    var ol = p.role === 'OL0' || p.role === 'OL1';
+    var ol = isOL(p);
     this.players.forEach(function (d) {
       if (d.team === p.team || d.state !== 'ok' || (d.eng && d.eng !== p)) return;
       var toCarrier = dist(d, carrier);

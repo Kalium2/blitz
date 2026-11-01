@@ -145,7 +145,7 @@
 
   // ------------------------------------------- receiver icons and play art
   // One colour per receiver icon: 1 WR1, 2 WR2, 3 TE, 4 RB.
-  var REC_COLORS = ['#2ee6ff', '#ffd23a', '#3dff8b', '#ff6ad5'];
+  var REC_COLORS = ['#2ee6ff', '#ffd23a', '#3dff8b', '#ff6ad5', '#ff9a3c'];
   var SCRIMMAGE = { pass: true, screen: true, run: true };
 
   function humanOffense(g) {
@@ -199,7 +199,7 @@
     ctx.restore();
   }
 
-  // Numbered icons over each receiver: press 1-4 (or click the icon) to set a
+  // Numbered icons over each receiver: press 1-5 (or click the icon) to set a
   // hot route before the snap or to throw to him after it. When passing, the
   // ring shows how open he is.
   function drawReceiverIcons(ctx, R, g) {

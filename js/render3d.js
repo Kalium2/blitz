@@ -781,10 +781,10 @@
     var stance = 0;
     if (g.phase === 'presnap' && g.playType !== 'kickoff') {
       var role = p.role, key = p.key;
-      if (role === 'OL0' || role === 'OL1' || key === 'F1' || key === 'F2' || key === 'NT') {
+      if (/^OL/.test(role) || key === 'F1' || key === 'F2' || key === 'NT' || key === 'T2') {
         crouchLegs(tp, 0.95); tp.lean = 1.05;
         var ground = { p: -1.25, r: 0.05, e: 0 };
-        tp.aR = ground; tp.aL = (key === 'NT') ? { p: -1.25, r: 0.05, e: 0 } : { p: -0.6, r: 0.25, e: -1.4 };
+        tp.aR = ground; tp.aL = (key === 'NT' || key === 'T2') ? { p: -1.25, r: 0.05, e: 0 } : { p: -0.6, r: 0.25, e: -1.4 };
         return tp;
       }
       if (role === 'QB') {
@@ -1085,7 +1085,7 @@
       if (snap) {
         var id = p.info.id;
         m.seed = hash(id);
-        var big = p.role === 'OL0' || p.role === 'OL1' || p.info.arch === 'DT' || p.info.pos === 'DL';
+        var big = /^OL/.test(p.role) || p.info.arch === 'DT' || p.info.pos === 'DL';
         m.setTeam(g.teams[p.team], Math.floor(hash(id + 's') * 6), big, 0.96 + hash(id + 'h') * 0.08);
         m.lastP = p;
         m.throwT = 0;

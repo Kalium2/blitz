@@ -388,8 +388,8 @@
       }
       if (off) {
         var F = FB.Plays.FORMATIONS[play.form];
-        var col = { WR1: '#ffd23a', WR2: '#2ee6ff', TE: '#ff7ad9', RB: '#3dff8b' };
-        ['WR1', 'WR2', 'TE', 'RB'].forEach(function (role) {
+        var col = { WR1: '#ffd23a', WR2: '#2ee6ff', TE: '#ff7ad9', RB: '#3dff8b', WR3: '#ff9a3c' };
+        ['WR1', 'WR2', 'TE', 'RB', 'WR3'].forEach(function (role) {
           var path = play.type === 'run' && role === 'RB' && !play.keeper ? play.run : (play.routes && play.routes[role]);
           if (!path) return;
           var blocks = play.block && play.block[role];
@@ -421,7 +421,7 @@
           var e = qpath[qpath.length - 1], s0 = qpath.length > 1 ? qpath[qpath.length - 2] : Q;
           if (!play.draw) arrow(X(s0[1]), Y(s0[0]), X(e[1]), Y(e[0]), '#ffffff');
         }
-        ['QB', 'RB', 'WR1', 'WR2', 'TE', 'OL0', 'OL1'].forEach(function (role) {
+        ['QB', 'RB', 'WR1', 'WR2', 'TE', 'WR3', 'OL0', 'OL1', 'OL2', 'OL3', 'OL4'].forEach(function (role) {
           var p = F[role];
           ctx.fillStyle = role === 'QB' ? '#fff' : (role.indexOf('OL') === 0 ? '#9aa3c7' : col[role]);
           ctx.beginPath(); ctx.arc(X(p[1]), Y(p[0]), 4.2, 0, 7); ctx.fill();
@@ -439,6 +439,7 @@
           if (a && a.man === 'WR1') p = [6, G.WR1[1]];
           if (a && a.man === 'WR2') p = [6, G.WR2[1]];
           if (a && a.man === 'TE') p = [4.5, G.TE[1]];
+          if (a && a.man === 'WR3') p = [5, G.WR3[1]];
           var x = X(p[1]), y = Y(p[0]);
           if (a === 'rush' || a === 'runfit') {
             ctx.strokeStyle = a === 'rush' ? '#ff4d1f' : '#ffb21f'; ctx.lineWidth = 2.4;
@@ -461,7 +462,7 @@
           ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
         });
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
-        ['QB', 'WR1', 'WR2', 'TE', 'RB'].forEach(function (role) { var p = G[role]; ctx.beginPath(); ctx.arc(X(p[1]), Y(p[0]), 3, 0, 7); ctx.fill(); });
+        ['QB', 'WR1', 'WR2', 'WR3', 'TE', 'RB'].concat(FB.Plays.OL_ROLES).forEach(function (role) { var p = G[role]; ctx.beginPath(); ctx.arc(X(p[1]), Y(p[0]), 3, 0, 7); ctx.fill(); });
       }
     },
 

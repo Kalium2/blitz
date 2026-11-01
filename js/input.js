@@ -13,12 +13,12 @@
     solo: {
       up: ['KeyW', 'ArrowUp'], down: ['KeyS', 'ArrowDown'], left: ['KeyA', 'ArrowLeft'], right: ['KeyD', 'ArrowRight'],
       action: ['Space', 'KeyJ'], turbo: ['ShiftLeft', 'ShiftRight', 'KeyK'], special: ['KeyL', 'KeyE'], start: ['Escape', 'Enter', 'KeyP'],
-      rec: [['Digit1', 'Numpad1'], ['Digit2', 'Numpad2'], ['Digit3', 'Numpad3'], ['Digit4', 'Numpad4']], timeout: ['KeyT']
+      rec: [['Digit1', 'Numpad1'], ['Digit2', 'Numpad2'], ['Digit3', 'Numpad3'], ['Digit4', 'Numpad4'], ['Digit5', 'Numpad5']], timeout: ['KeyT']
     },
     p1: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], action: ['Space'], turbo: ['ShiftLeft'], special: ['KeyE'], start: ['Escape'],
-      rec: [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4']], timeout: ['KeyT'] },
+      rec: [['Digit1'], ['Digit2'], ['Digit3'], ['Digit4'], ['Digit5']], timeout: ['KeyT'] },
     p2: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], action: ['Numpad0', 'Slash'], turbo: ['NumpadDecimal', 'Period'], special: ['NumpadEnter', 'Comma'], start: ['Enter'],
-      rec: [['Numpad1'], ['Numpad2'], ['Numpad3'], ['Numpad4']], timeout: ['NumpadSubtract'] }
+      rec: [['Numpad1'], ['Numpad2'], ['Numpad3'], ['Numpad4'], ['Numpad5']], timeout: ['NumpadSubtract'] }
   };
 
   var Input = {
@@ -114,7 +114,7 @@
         x: (any(map.right) ? 1 : 0) - (any(map.left) ? 1 : 0),
         y: (any(map.up) ? 1 : 0) - (any(map.down) ? 1 : 0),
         action: any(map.action), turbo: any(map.turbo), special: any(map.special), start: any(map.start), timeout: any(map.timeout),
-        // receiver icon key held (1-4), 0 for none
+        // receiver icon key held (1-5), 0 for none
         rec: map.rec ? map.rec.reduce(function (r, keys, i) { return r || (any(keys) ? i + 1 : 0); }, 0) : 0
       };
     },

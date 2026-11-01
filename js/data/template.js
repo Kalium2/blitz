@@ -63,11 +63,15 @@
     tackler:   { tak: 5 }              // sure tackler
   };
 
-  // Generic (unnamed) players: offensive linemen and depth defenders.
+  // Generic (unnamed) players who fill out the 11 on each side: offensive
+  // linemen, a slot receiver and depth defenders.
   var GENERIC = {
     OL: { spd: 58, agi: 60, str: 86, cth: 40, thp: 40, tha: 40, tak: 55, cov: 40, prs: 40 },
+    WR: { spd: 84, agi: 80, str: 60, cth: 72, thp: 40, tha: 40, tak: 45, cov: 40, prs: 40 },
     DL: { spd: 64, agi: 62, str: 82, cth: 40, thp: 40, tha: 40, tak: 72, cov: 45, prs: 70 },
-    DB: { spd: 84, agi: 80, str: 58, cth: 58, thp: 40, tha: 40, tak: 66, cov: 74, prs: 45 }
+    LB: { spd: 74, agi: 70, str: 74, cth: 50, thp: 40, tha: 40, tak: 74, cov: 64, prs: 62 },
+    DB: { spd: 84, agi: 80, str: 58, cth: 58, thp: 40, tha: 40, tak: 66, cov: 74, prs: 45 },
+    S: { spd: 82, agi: 76, str: 64, cth: 60, thp: 40, tha: 40, tak: 72, cov: 72, prs: 48 }
   };
 
   var KEYS = ['spd', 'agi', 'str', 'cth', 'thp', 'tha', 'tak', 'cov', 'prs'];

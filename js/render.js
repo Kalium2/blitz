@@ -381,7 +381,7 @@
     var x = s.x, y = s.y - p.z * u;
     var d = this.cam.dir;
     var fx = Math.cos(p.face) * d, fy = Math.sin(p.face) * d; // fx>0: facing away from camera; fy: screen right
-    var big = p.role === 'OL0' || p.role === 'OL1' || p.info.arch === 'DT' || p.info.pos === 'DL';
+    var big = /^OL/.test(p.role) || p.info.arch === 'DT' || p.info.pos === 'DL';
     var wScale = big ? 1.18 : 1;
     ctx.save();
     ctx.translate(x, y);

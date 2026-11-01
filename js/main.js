@@ -582,13 +582,13 @@
       if (g.phase === 'presnap') {
         if (g.playType === 'kickoff' && g.koMeter && !g.koMeter.set && c.team === g.kickTeam) return A + ': SET KICK POWER  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '');
         if (g.playType === 'kickoff') return c.team === g.kickTeam ? A + ': KICK  \u2022  ' + S + ': ONSIDE KICK' + (g.onside ? ' \u2713' : '') : null;
-        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE' + (g.playType !== 'run' && !pad && !touch ? '  \u2022  1-4: HOT ROUTE' : '');
+        if (c.team === g.poss) return A + ': SNAP  \u2022  ' + S + ': AUDIBLE' + (g.playType !== 'run' && !pad && !touch ? '  \u2022  1-5: HOT ROUTE' : '');
         return A + ': SWITCH DEFENDER  \u2022  ' + S + ': AUDIBLE';
       }
       if (g.phase === 'live') {
         if (b.state === 'held' && b.holder === c.pl) {
           if (this.aimUI && this.aimUI.active && touch) return 'HOLD PASS: POWER  \u2022  RELEASE ON GOLD: PERFECT  \u2022  STICK OR TAP AN ICON: CHOOSE RECEIVER';
-          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  1-4: THROW TO ICON  \u2022  HOLD + RELEASE ON GOLD: PERFECT  \u2022  RIGHT-CLICK: CANCEL';
+          if (this.aimUI && this.aimUI.active) return 'CLICK: PASS  \u2022  1-5: THROW TO ICON  \u2022  HOLD + RELEASE ON GOLD: PERFECT  \u2022  RIGHT-CLICK: CANCEL';
           if (c.pl.role === 'QB' && !g.passThrown && !g.handedOff && g.playType !== 'run' && g.relX(c.pl.x) <= 0.5) return (touch || pad ? 'AIM + ' + A : 'CLICK A RECEIVER (OR AIM + ' + A + ')') + ': PASS  \u2022  HOLD ' + T + ': BULLET PASS';
           return A + ': SPIN  \u2022  ' + T + '+' + A + ': STIFF ARM  \u2022  ' + S + ': HURDLE  \u2022  ' + T + '+' + S + ': LATERAL';
         }
