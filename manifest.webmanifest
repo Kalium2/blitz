@@ -1,7 +1,7 @@
 {
   "name": "Football Blitz '26",
   "short_name": "Blitz '26",
-  "description": "Arcade 7-on-7 football with 2026 NFL rosters rated from fantasy stats.",
+  "description": "Arcade 11-on-11 football with 2026 NFL rosters rated from fantasy stats.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

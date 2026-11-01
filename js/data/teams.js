@@ -3,8 +3,9 @@
  *
  * Roster snapshot: starters from late-October 2026 (Week 8) depth charts.
  * Each team fields its 5 headline offensive players (QB, RB, WR, WR, TE) and
- * 5 headline defenders (2 front, 1 second-level, 2 secondary). The two
- * offensive linemen and two depth defenders on the field are generic.
+ * 5 headline defenders (2 front, 1 second-level, 2 secondary). The rest of the
+ * 11 on each side are generic: five offensive linemen and a slot receiver, and
+ * a defensive tackle, a nose tackle, two linebackers, a corner and a safety.
  * Players on injured reserve at snapshot time were left out where the
  * depth chart made that clear.
  *
@@ -176,8 +177,11 @@
   TEAMS.concat([HIDDEN]).forEach(function (t) {
     t.offense = t.off.map(function (e, i) { return FB.Template.buildPlayer(e, t.abbr, 'O' + i); });
     t.defense = t.def.map(function (e, i) { return FB.Template.buildPlayer(e, t.abbr, 'D' + i); });
-    t.ol = [FB.Template.genericPlayer('OL', t.abbr, 'OL0'), FB.Template.genericPlayer('OL', t.abbr, 'OL1')];
-    t.depth = [FB.Template.genericPlayer('DL', t.abbr, 'DL9'), FB.Template.genericPlayer('DB', t.abbr, 'DB9')];
+    var G = FB.Template.genericPlayer;
+    t.ol = [0, 1, 2, 3, 4].map(function (i) { return G('OL', t.abbr, 'OL' + i); });
+    t.wr3 = G('WR', t.abbr, 'WR9');
+    // depth: NT, CB, then the extra 4-3 pieces (DT, two LBs, FS)
+    t.depth = [G('DL', t.abbr, 'DL9'), G('DB', t.abbr, 'DB9'), G('DL', t.abbr, 'DL8'), G('LB', t.abbr, 'LB8'), G('LB', t.abbr, 'LB9'), G('S', t.abbr, 'S9')];
     var o = t.offense, d = t.defense;
     t.ratings = {
       pass: Math.round((o[0].r.ovr * 2 + o[2].r.ovr + o[3].r.ovr + o[4].r.ovr) / 5),
