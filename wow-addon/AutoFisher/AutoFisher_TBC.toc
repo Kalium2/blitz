@@ -1,0 +1,8 @@
+## Interface: 20505
+## Title: AutoFisher
+## Notes: One-key fishing: press your key to cast, press it again to reel in. Auto loot and loud splash while fishing.
+## Author: kalium2
+## Version: 1.0.0
+## SavedVariables: AutoFisherDB
+
+AutoFisher.lua
